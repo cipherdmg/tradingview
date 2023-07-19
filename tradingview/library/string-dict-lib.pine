@@ -1,0 +1,411 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © paragjyoti2012
+
+//@version=5
+
+// @description : This Library is aimed to mitigate the limitation of Pinescript having only one structured data type which is only arrays.
+// It lacks data types like Dictionaries(in Python) or Object (in JS) that are standard for other languages. Tuples do exist, but it hardly solves any problem.
+// Working only with Arrays could be overwhelming if your codebase is large. I looked for alternatives to arrays but couldn't find any library.
+// So I coded it myself and it's been working good for me. So I wanted to share it with you all.
+
+// What does it do:
+// ==================
+// If you are familiar with Python or Javascript, this library tries to immimate Object/Dictonary like structure with Key Value Pairs.
+// For Example:
+
+// object= {name:"John Doe", age: 28 , org: "PineCoders"}
+
+// And then it also tries to immitate the Array of Objects (I call it Stack)
+// like this:
+// stack= [{name:"John Doe", age: 28 , org: "PineCoders"},
+//         {name:"Adam Smith", age: 32 , org: "PineCoders"},
+//         {name:"Paragjyoti Deka", age: 25 , org: "PineCoders"}]
+
+// So there are basically two ideas: Objects and Stacks.
+
+// But it looks whole different in Pinescript for obvious reasons.
+
+// Limitation:
+
+// The major limitation I couldn't overcome was that, for all of the values: both input and return values for properties will be of string type.
+// This is due to the limiation of Pinecsript that there is no way to return a value on a if-else statement dynamically with different data types.
+// And as the input data type must be explicitly defined when exporting the library functions, only string inputs are allowed.
+// Now that doesn't mean you won't be able to use integer, float or boolens, you just need to pass the string value for it using str.tostring() method.
+// And the output for the getter functions will be in strings as well. But I have added some type conversion methods that you could use from this library itself.
+// From String to Float, String To Integer and String to Boolean: these three methods are included in this library.
+
+// So basically the whole library is based on a manipulatiion of Array of strings under the hood.
+
+// ///////////////
+// Usage
+// ///////////////
+
+// Import the library using this statement:
+
+// import paragjyoti2012/STR_Dictionary_Lib/2 as DictLib
+
+// Objects
+
+// / First define an object using this method:
+
+//  for eample:
+
+//  object1= DictLib.init("name=John,age=26,org=")
+
+//  This is similar to
+//      object1= {name:"John",age:"26", org:""} in JS or Python
+
+//   Just like we did here in for "org", you can set initital value to "". But remember to pass string values, even for a numerical properties, like here in "age".
+//   You can use "age="+str.tostring(age). If you find it tedious, you can always add properties later on using .set() method.
+
+//   So it could also be initiated like this
+//     object= DictLib.init("name=John")
+//   and later on
+//      DictLib.set(object1,"age", str.toString(age))
+//      DictLib.set(object1,"org", "PineCoders")
+
+
+// The getter function looks like this
+
+// age= DictLib.get(object1,"age")
+// name=DictLib.get(object1,"name")
+
+// The first argument for all methods .get, .set, and .remove is the pointer (name of the object).
+
+// ///////////////////////////
+// Array Of Objects  (Stacks)
+// ///////////////////////////
+
+
+// As I mentioned earlier, I call the array of objects as Stack.
+
+// Here's how to initialize a Stack.
+
+//  stack= DictLib.initStack(object1)
+
+//  The .initStack() method takes an object pointer as argument. It simply converts the array into a string and pushes it into the newly created stack.
+
+//  Rest of all the methods for Stacks, takes the stack pointer as it's first arument.
+
+//  For example:
+
+//      DictLib.pushStack(stack,object2)
+
+//  The second argument here is the object pointer. It adds the object to it's stack. Although it might feel like a two dimentional array, it's actually an one dimentional array with string values.
+//  Under the hood, it looks like this ["name=John,age=26,org=Pinecoders",
+//                                     "name=Adam,age=35,org=Pinecoders"]
+
+// ////////////////////
+// Methods
+// ////////////////////
+
+// For Objects
+// -------------------
+
+// init() : Initializes the object.
+
+// params: (string) e.g
+// returns: The object ([The object is actually an array of strings. So the .init() method, basically returns an array of strings])
+
+// example:
+//     object1=DictLib.init("name=John,age=26,org=")
+
+// ...................
+
+// get() : Returns the value for given property
+// params: (string[] object_pointer, string property)
+// returns: string
+
+// example:
+//     age= DictLib.get(object1,"age")
+
+// .......................
+
+// set() : Adds a new property or updates an existing property
+// params: (string[] object_pointer, string property, string value)
+// returns: void
+
+// example:
+//     DictLib.set(object1,"age", str.tostring(29))
+
+// ........................
+
+// remove() : Removes a property from the object
+// params   : (string[] object_pointer, string property)
+// returns: void
+
+// example:
+//     DictLib.set(object1,"org")
+
+// ........................
+
+
+// For Array Of Objects (Stacks)
+// -------------------------------
+
+// initStack() : Initializes the stack.
+
+// params: (string[] object_pointer) e.g
+// returns: The Stack
+
+// emaple:
+//     stack= DictLib.initStack(object1)
+
+// ...................
+
+// pushToStack() : Adds an object at at last index of the stack
+// params: (string[] stack_pointer, string[] object_pointer)
+// returns: void
+
+// example:
+//     DictLib.pushToStack(stack,object2)
+
+// .......................
+
+// popFromStack() : Removes the last object from the stack
+// params: (string[] stack_pointer)
+// returns: void
+
+// example:
+//     DictLib.popFromStack(stack)
+
+// .......................
+
+// insertToStack() : Adds an object at at the given index of the stack
+// params: (string[] stack_pointer, string[] object_pointer, int index)
+// returns: void
+
+// example:
+//     DictLib.insertToStack(stack,object3,1)
+
+// .......................
+
+// removeFromStack() : Removes the object from the given index of the stack
+// params: (string[] stack_pointer, int index)
+// returns: void
+
+// example:
+//     DictLib.removeFromStack(stack,2)
+
+// .......................
+
+// getElement () : Returns the value for given property from an object in the stack (index must be given)
+// params: (string[] stack_pointer, int index, string property)
+// returns: string
+
+// example:
+//     ageFromObject1= DictLib.getElement(stack,0,"age")
+
+// .......................
+
+// setElement() : Updates an existing property of an object in the stack (index must be given)
+// params: (string[] stack_pointer, int index, string property, string value)
+// returns: void
+
+// example:
+//     DictLib.setElement(stack,0,"age", str.tostring(32))
+
+// ........................
+
+// includesElement() : Checks if any object exists in the stack with the given property-value pair
+// params   : (string[] stack_pointer, string property, string value)
+// returns : Boolean
+
+// example:
+//   doesExist= DictLib.includesElement(stack,"org","PineCoders")
+
+// ........................
+
+// searchStack() : Search for a property-value pair in the stack and returns it's index
+// params: (stringp[] stack_pointer, string property, string value)
+// returns: int (-1 if doesn't exist)
+
+// example:
+//   index= DictLib.searchElement(stack,"org","PineCoders")
+
+
+// Points to remember
+// ...............
+
+//     1. Always pass string values as arguments.
+//     2. The return values will be of type string, so convert them before to avoid typecasting conflict.
+
+// More Informations
+// ====================
+
+//     Yes, You can store this objects and stacks for persisting through the iterations of a script across successive bars.
+//     You just need to set the variable using "var" keyword. Remember this objects and stacks are just arrays,
+//     so any methods and properties an array have it pinescript, would be applicable for objects and stacks.
+
+//     It can also be used in security functions without any issues for MTF Analysis.
+
+//     If you have any suggestions or feedback, please comment on the thread, I would surely be happy to help.
+
+
+
+
+
+
+library("STR_Dictionary_Lib")
+
+
+export init(string input)=>str.split(input,",")
+
+export get(string[] object_pointer, string property)=>
+    val=""
+    for x=0 to array.size(object_pointer)-1
+        _prop=  array.get(str.split(array.get(object_pointer,x),"="),0)
+        _val=   array.get(str.split(array.get(object_pointer,x),"="),1)
+        if(_prop==property)
+            val:=_val
+    val
+
+
+_indexofElement(pointer, property)=>
+    propindex=-1
+    for x=0 to array.size(pointer)-1
+        arr_chunk_str=array.get(pointer,x)
+        str_chunk_arr=str.split(arr_chunk_str,'=')
+        if(array.get(str_chunk_arr,0)==property)
+            propindex:=x
+    propindex
+
+export set(string[] object_pointer, string property, string val )=>
+    index=_indexofElement(object_pointer,property)
+    if(index!=-1)
+        for x=0 to array.size(object_pointer)-1
+            _prop= array.get(str.split(array.get(object_pointer,x),"="),0)
+            _val=   array.get(str.split(array.get(object_pointer,x),"="),1)
+            if(_prop==property)
+                array.set(object_pointer,x, property+"="+val)
+    else
+        array.push(object_pointer,property+"="+val)
+
+
+export remove(string[] object_pointer, string property)=>
+    for x=0 to array.size(object_pointer)-1
+        _prop= array.get(str.split(array.get(object_pointer,x),"="),0)
+        if(property==_prop)
+            array.remove(object_pointer,x)
+            break
+
+export initStack(string[] object_pointer)=>
+    str_arr=array.join(object_pointer,",")
+    array.new_string(1,str_arr)
+
+export pushToStack(string[] stack_pointer, string[] object_pointer)=>
+    str_arr=array.join(object_pointer,',')
+    array.push(stack_pointer,str_arr)
+
+export updateStack(string[] stack_pointer, string[] object_pointer, int index)=>
+    str_arr=array.join(object_pointer,',')
+    array.set(stack_pointer,index,str_arr)
+
+export popFromStack(string[] stack_pointer)=>
+    array.pop(stack_pointer)
+
+export insertToStack(string[] stack_pointer, string[] object_pointer, int index)=>
+    str_arr=array.join(object_pointer,',')
+    array.insert(stack_pointer,index,str_arr)
+
+export removeFromStack(string[] stack_pointer, int index)=>
+    array.remove(stack_pointer,index)
+
+export getElement(string[] stack_pointer,int index,string property)=>
+    str_arr=array.get(stack_pointer,index)
+    arr_str=str.split(str_arr,',')
+    val=""
+    for x=0 to array.size(arr_str)-1
+        arr_chunk_str=array.get(arr_str,x)
+        str_chunk_arr=str.split(arr_chunk_str,'=')
+        if(array.get(str_chunk_arr,0)==property)
+            val:=array.get(str_chunk_arr,1)
+    val
+
+
+_indexofElement(string[] stack_pointer,int index,string property)=>
+    str_arr=array.get(stack_pointer,index)
+    arr_str=str.split(str_arr,',')
+    propindex=-1
+    for x=0 to array.size(arr_str)-1
+        arr_chunk_str=array.get(arr_str,x)
+        str_chunk_arr=str.split(arr_chunk_str,'=')
+        if(array.get(str_chunk_arr,0)==property)
+            propindex:=x
+    propindex
+
+
+export setElement(string[] stack_pointer,int index,string property, string value)=>
+    str_arr=array.get(stack_pointer,index)
+    arr_str=str.split(str_arr,',')
+
+    propindex=_indexofElement(stack_pointer,index,property)
+
+    array.set(arr_str,propindex,property+'='+value)
+    new_str=array.join(arr_str,',')
+    array.set(stack_pointer,index,new_str)
+    stack_pointer
+
+export includesElement(string[] stack_pointer,string property, string value)=>
+    exists=false
+    if(array.size(stack_pointer))
+        for x=0 to array.size(stack_pointer)-1
+            val=getElement(stack_pointer,x,property)
+            if(val==value)
+                exists:=true
+    exists
+
+
+export searchStack(string[] stack_pointer,string property, string value)=>
+    index=-1
+    if(array.size(stack_pointer))
+        for x=0 to array.size(stack_pointer)-1
+            val=getElement(stack_pointer,x,property)
+            if(val==value)
+                index:=x
+    index
+
+
+strToBool(string str)=>
+    if(str=="True" or str=="true" or str=="1")
+        true
+    else
+        false
+
+export getFloat(string[] object_pointer, string property)=>
+    str.tonumber(get(object_pointer,property))
+
+export getInt(string[] object_pointer, string property)=>
+    int(str.tonumber(get(object_pointer,property)))
+
+export getBool(string[] object_pointer, string property)=>
+    strToBool(get(object_pointer,property))
+
+export getFloatElement(string[] stack_pointer,int index,string property)=>
+    str.tonumber(getElement(stack_pointer,index,property))
+
+export getIntElement(string[] stack_pointer,int index,string property)=>
+    int(str.tonumber(getElement(stack_pointer,index,property)))
+
+export getBoolElement(string[] stack_pointer,int index,string property)=>
+    strToBool(getElement(stack_pointer,index,property))
+
+
+
+export setFloat(string[] object_pointer, string property, float val )=>
+    set(object_pointer,property,str.tostring(val))
+
+export setInt(string[] object_pointer, string property, int val)=>
+    set(object_pointer,property,str.tostring(val))
+
+export setBool(string[] object_pointer, string property, bool val)=>
+    set(object_pointer,property,str.tostring(val))
+
+export setFloatElement(string[] stack_pointer,int index,string property, float value)=>
+    setElement(stack_pointer,index,property,str.tostring(value))
+
+export setIntElement(string[] stack_pointer,int index,string property, int value)=>
+    setElement(stack_pointer,index,property,str.tostring(value))
+
+export setBoolElement(string[] stack_pointer,int index,string property, bool value)=>
+    setElement(stack_pointer,index,property,str.tostring(value))

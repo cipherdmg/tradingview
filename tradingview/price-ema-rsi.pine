@@ -1,0 +1,35 @@
+//@version=5
+// ||###################################################################################||
+// ||                                                                                   ||
+// || Cipher DMG
+// || The Strat                                                                         ||
+// ||     What are the 1s, 2s, & 3s                                                     ||
+// ||                                                                                   ||
+// ||                                                                                   ||
+// ||###################################################################################||
+
+//https://www.tradingview.com/script/EutGHLNh-Power-Indicator-EMAs-VWAP-Demark9-Volume-Bar/
+indicator(title="9 EMA with RSI", shorttitle="9 EMA with RSI", max_labels_count = 500, overlay=true)
+
+maLength = input.int(9, minval=1, title="Moving Average Length", group='Moving Average')
+maSrc = input(close, "Moving Average Source", group='Moving Average')
+
+//RSI
+//Plot the Relative Strength Index (RSI) when its over 70 and under 30
+rsi_len = input.int(14, minval=1, title="RSI Length", group='RSI')
+rsi_src = input(close, "RSI Source", group='RSI')
+rsi_min = input.int(30, minval=1, title="RSI Minimum Threshold", group='RSI')
+rsi_max = input.int(70, minval=1, title="RSI Maximum Threshold", group='RSI')
+
+// overboughtColor = input.color(color.new(color.white, 0), title='Overbought Color', group='Colors', group='RSI')
+// oversoldColor = input.color(color.new(color.aqua, 0), title='Oversold Color', group='Colors', group='RSI')
+overboughtColor = input.color(color.new(color.red,80), title='Overbought Color', group='RSI')
+oversoldColor = input.color(color.new(color.green, 80), title='Oversold Color',  group='RSI')
+
+//rsi_color = rsi > rsi_max ? color.new(color.red,80)  : rsi < rsi_min ? color.new(color.green, 80) : na
+
+movingaverage = ta.ema(maSrc, maLength)
+
+// Output
+plot(series=movingaverage, title="Moving Average", color=color.red, linewidth=1, style=plot.style_line)
+

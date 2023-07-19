@@ -1,0 +1,209 @@
+//@version=5
+// ||###################################################################################||
+// ||                                                                                   ||
+// || Cipher DMG
+// || The Strat                                                                         ||
+// ||     What are the 1s, 2s, & 3s                                                     ||
+// ||                                                                                   ||
+// ||                                                                                   ||
+// ||###################################################################################||
+
+//strategy('The Strat', shorttitle='The Strat', overlay=true, process_orders_on_close=true, initial_capital=100000, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_order, pyramiding=1, commission_value=2.00)
+indicator(title="The Strat", shorttitle="The Strat", max_labels_count = 500, overlay=true)
+
+//388e3c - Green [rgb(56,142,60)]
+//b22833 - Red [rgb(178,40,51)]
+
+bullishColor = input.color(color.new(color.green, 0), title='Bullish Candle Color', group='Colors')
+bullishColorLabel = input.color(color.new(color.green, 0), title='Bullish Candle Label Color', group='Colors')
+// bullishColor = input.color(color.rgb(56,142,60), title='Bullish Candle Color', group='Colors')
+// bullishColorLabel = input.color(color.rgb(56,142,60), title='Bullish Candle Label Color', group='Colors')
+fullBodyGreenCandleColor = input.color(color.rgb(112,204,189), title='Bullish Full Body Candle Color', group='Colors')
+
+bearishColor = input.color(color.new(color.red, 0), title='Bearish Candle Color', group='Colors')
+bearishColorLabel = input.color(color.new(color.red, 0), title='Bearish Candle Label Color', group='Colors')
+// bearishColor = input.color(color.rgb(178,40,51), title='Bearish Candle Color', group='Colors')
+// bearishColorLabel = input.color(color.rgb(178,40,51), title='Bearish Candle Label Color', group='Colors')
+fullBodyRedCandleColor = input.color(color.rgb(250,161,164), title='Bearish Full Body Candle Color', group='Colors')
+
+insideColor = input.color(color.new(color.yellow, 0), title='Inside Candle Color', group='Colors')
+insideColorLabel = input.color(color.new(color.yellow, 0), title='Inside Candle Label Color', group='Colors')
+
+outsideColor = input.color(color.new(color.fuchsia, 0), title='Outside Candle Color', group='Colors')
+outsideColorLabel = input.color(color.new(color.fuchsia, 0), title='Outside Candle Label Ccolor', group='Colors')
+
+showInsideCandleColor = input.bool(true, title='Show Inside Candle Color', group='Enable Candle Colors')
+showOutsideCandleColor = input.bool(true, title='Show Outside Candle Color', group='Enable Candle Colors')
+showFullBodyCandleColor = input.bool(true, title='Show Full Body Candles', group='Enable Candle Colors')
+
+//RSI
+//Plot the Relative Strength Index (RSI) when its over 70 and under 30
+rsi_len = input.int(14, minval=1, title="RSI Length", group='RSI')
+rsi_src = input(close, "RSI Source", group='RSI')
+rsi_min = input.int(30, minval=1, title="RSI Minimum Threshold", group='RSI')
+rsi_max = input.int(70, minval=1, title="RSI Maximum Threshold", group='RSI')
+
+// overboughtColor = input.color(color.new(color.white, 0), title='Overbought Color', group='Colors')
+// oversoldColor = input.color(color.new(color.aqua, 0), title='Oversold Color', group='Colors')
+overboughtColor = input.color(color.new(color.red,80), title='Overbought Color', group='Colors')
+oversoldColor = input.color(color.new(color.green, 80), title='Oversold Color', group='Colors')
+
+// https://elitecurrensea.com/education/using-the-candlestick-wick-to-measure-true-or-fake-breakout/
+wickPercentage = input.int(15, minval=1, title="Full Body Wick Percentage", group='Candle Wick')
+
+
+//rsi_color = rsi > rsi_max ? color.new(color.red,80)  : rsi < rsi_min ? color.new(color.green, 80) : na
+
+
+///////////////////////////////////////////////
+// END: user input
+///////////////////////////////////////////////
+
+//##################################################################################################
+//Functions
+//##################################################################################################
+
+
+// @function The given candle is up where the open is less then the close for the given index
+// @param idx index to use
+// @return true if the indexed candle is Green
+isGreenCandle(int idx) =>
+    open[idx] < close[idx]
+
+// @function The given candle is up where the open is less then the close for the given index
+//  Candle high minus candle low = candle size
+//  High of candle minus candle close = wick on top of candle
+//  Open of candle minus candle low = wick on bottom of candle
+// @return true if the indexed candle is Green
+isGreenCandleBullish(int idx) =>
+    candleSize = math.abs((high[idx]) - (low[idx]))
+    wickTop = math.abs((high[idx]) - (close[idx]))
+    wickBottom = math.abs((open[idx]) - (low[idx]))
+    (((wickTop + wickBottom)/candleSize) * 100) < wickPercentage
+
+// @function The given candle is up where the open is greater then or equal to the close for the given index
+// @param idx index to use
+// @return true if the indexed candle is Red
+isRedCandle(int idx) =>
+    open[idx] >= close[idx]
+
+// @function The given candle is up where the open is greater then or equal to the close for the given index
+// Candle high minus candle low = candle size
+// High of candle minus candle open = wick on top of candle
+// Close of candle minus candle low = wick on bottom of candle
+// @return true if the indexed candle is Red
+isRedCandleBearish(int idx) =>
+    candleSize = math.abs((high[idx]) - (low[idx]))
+    wickTop = math.abs((high[idx]) - (open[idx]))
+    wickBottom = math.abs((close[idx]) - (low[idx]))
+    (((wickTop + wickBottom)/candleSize) * 100) < wickPercentage
+
+// @function Entire Candle wick to wick is inside the previous candle.  This is considered a Scenario 1.
+// It means its consolidation on a smaller timeframe  We do not want to trade things on a 1 because it has Not picked its direction.
+// @param idx index to use
+// @returns
+isInsideCandle(int idx) =>
+    high[idx] <= high[idx + 1] and low[idx] >= low[idx + 1]
+
+//@function Candle engulfs the previous candle and is typically the larges bar.  This is considered a Scenario 3
+//Most commonly 3s occur after 1
+//@return
+isOutsideCandle(int idx) =>
+    high[idx] > high[idx + 1] and low[idx] < low[idx + 1]
+
+
+//2
+//@function  Down Directional Candle which broke the previous candle's low
+isTwoDownCandle(int idx) =>
+    low[idx] < low[idx + 1] and not (high[idx] > high[idx + 1])
+
+
+//2
+//@function Up Directional Candle which broke the previous candle's low
+isTwoUpCandle(int idx) =>
+    high[idx] > high[idx + 1] and not (low[idx] < low[idx + 1])
+
+
+// reusable bar identifier functions for series
+isInsideCandleSeries(highSeries, lowSeries) =>
+    highSeries[0] <= highSeries[1] and lowSeries[0] >= lowSeries[1]
+
+isOutsideCandleSeries(highSeries, lowSeries) =>
+    highSeries[0] > highSeries[1] and lowSeries[0] < lowSeries[1]
+
+
+///////////////////////////////////////////////
+// END: Functions & Logic
+///////////////////////////////////////////////
+
+
+//##################################################################################################
+//The Strat Combinations
+//
+
+
+//##################################################################################################
+//Plot the 1, 2U, 2D, 3 Strat Numbering System
+//##################################################################################################
+
+// identify 1 candles with identifier below
+plotchar(isInsideCandle(0), title='One Bar Label', char='1', location=location.belowbar, color=insideColorLabel, display=display.all)
+
+// identify 2 up candle with identifier below and indicator above
+plotshape(isTwoUpCandle(0), style=shape.arrowup, title='Two Up Bar Shape', location=location.abovebar, color=bullishColorLabel, display=display.all)
+plotchar(isTwoUpCandle(0), title='Two Up Bar Label', char='2', location=location.belowbar, color=bullishColorLabel, display=display.all)
+
+// identify 2 down candle with identifier below and indicator above
+plotshape(isTwoDownCandle(0), style=shape.arrowdown, title='Two Bar Shape', location=location.abovebar, color=bearishColorLabel, display=display.all)
+plotchar(isTwoDownCandle(0), title='Two Down Bar Label', char='2', location=location.belowbar, color=bearishColorLabel, display=display.all)
+
+// identify 3 candle with indentifier below
+plotchar(isOutsideCandle(0), title='Three Bar Label', char='3', location=location.belowbar, color=outsideColorLabel, display=display.all)
+
+//##################################################################################################
+// Change Bar Color
+//##################################################################################################
+// barcolor(color=getBarColor())
+_isInsideCandle = isInsideCandle(0)
+_isOutsideCandle = isOutsideCandle(0)
+_isGreenCandle = isGreenCandle(0)
+_isRedCandle = isRedCandle(0)
+_isGreenCandleBullish = isGreenCandleBullish(0)
+_isRedCandleBearish = isRedCandleBearish(0)
+
+//RSI over the last 3 candles
+rsi = ta.rsi(rsi_src, rsi_len)
+
+//bar_color=_isInsideCandle and showInsideCandleColor? insideColor : _isOutsideCandle and showOutsideCandleColor ? outsideColor : _isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+bar_color=_isGreenCandleBullish and showFullBodyCandleColor ? fullBodyGreenCandleColor : _isRedCandleBearish and showFullBodyCandleColor ? fullBodyRedCandleColor : _isInsideCandle and showInsideCandleColor? insideColor : _isOutsideCandle and showOutsideCandleColor ? outsideColor : _isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+
+wick_color=_isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+boarder_color=_isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+
+//rsi
+//boarder_color=rsi > rsi_max ? overboughtColor  : rsi < rsi_min ? oversoldColor : _isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+
+//rsi_color=rsi > rsi_max ? overboughtColor  : rsi < rsi_min ? oversoldColor : na
+//bgcolor(color=rsi_color, offset=0, editable=true, title="RSI")
+
+//barcolor(color= bar_color,offset=0,editable=true)
+plotcandle(open, high, low, close, title='Title', color = bar_color, wickcolor=wick_color,bordercolor=boarder_color)
+
+
+// stateText(stopLevel, targetPrice, riskReward) =>
+//     string txt = ""
+//     txt += "stopLevel: " + str.tostring(stopLevel) + "\n"
+//     txt += "targetPrice: " + str.tostring(targetPrice) + "\n"
+//     txt += "riskReward: " + str.tostring(riskReward)
+
+// // if ((barstate.isrealtime or barstate.islast) and (isInsideCandle(1))
+// if (isInsideCandle(1))
+
+//     if(isTwoDownCandle(2))
+//         reward = math.abs(high[2] - low[1])
+//         risk = high[1] - low[1]
+//         riskReward = reward / risk
+
+//         labelValue = stateText(risk,reward,riskReward)
+//         label.new(bar_index -1, na, labelValue , yloc = yloc.abovebar, color = bullishColor)
+

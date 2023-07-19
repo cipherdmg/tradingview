@@ -1,0 +1,198 @@
+//@version=5
+
+// ||###################################################################################||
+// ||                                                                                   ||
+// || Cipher DMG                                                                        ||
+// || Timeframe Sector Monitor in single row                                            ||
+// ||                                                                                   ||
+// ||###################################################################################||
+
+indicator(title="The Strat Timeframe Monitor Sectors", shorttitle="The Strat Timeframe Monitor Sectors", max_labels_count = 500, overlay=true)
+
+//bullishColor = input.color(color.new(color.green, 0), title='Bullish Candle Color', group='Colors')
+bullishColor = input.color(color.rgb(56,142,60), title='Bullish Candle Color', group='Colors')
+bullishTextColor = input.color(color.new(color.white, 0), title='Bullish Text Color', group='Colors')
+
+//bearishColor = input.color(color.new(color.red, 0), title='Bearish Candle Color', group='Colors')
+bearishColor = input.color(color.rgb(178,40,51), title='Bearish Candle Color', group='Colors')
+bearishTextColor = input.color(color.new(color.white, 0), title='Bearish Text Color', group='Colors')
+
+atrColor = input.color(color.new(color.gray, 0), title='ATR Candle Color', group='Colors')
+atrTextColor = input.color(color.new(color.white, 0), title='ATR Text Color', group='Colors')
+
+tfTableOpacity = input.int(50, title='Multi time frame table opacity', group="Colors")
+
+showPercentChange = input.bool(true, title='Show Percent Change', group='Table')
+addThreashold = input.float(-1000.00, title='Add Ticker Threashold', group="Add Ticker")
+
+// frameWidth = input.int(3, title='Table Frame Width', group='Table')
+cellWidth = input.int(3, title='Table Cell Width', group='Table')
+// firstRowTimeframe = input.string("1", title='First Timeframe', group='Time Frame Continuation')
+// secondRowTimeframe = input.string('15', title='Second Timeframe', group='Time Frame Continuation')
+
+//1, 5, 15, 30, 60, 1D, 1W, 3W
+timeframeContinuity = input.timeframe('1', "First Timeframe", options=['1', '2', '3', '4', '5', '10', '15', '30', '60','120','240', '1D', '1W', '1M', '3M', '12M'], group='Table')
+//rowNumber = input.int(0, "Row Number", options=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20], group='Table')
+
+//Ticker can be
+//{"session":"extended","symbole":"NYSE:UNH"}
+getTickerName(ticker) =>
+
+    if(str.contains(ticker, ","))
+        string _ticket = str.replace_all(str.replace_all(str.replace_all(ticker,"\"",""), "{", ""),"}","")
+        string[] _session = str.split(_ticket, ",")
+        string[] _pair = str.split(array.get(_session, 1), ":")
+        string[] _chars = str.split(array.get(_pair, 2), "")  // Index 1
+        string _return = array.join(_chars, "")
+    else
+        string[] _pair = str.split(ticker, ":")
+        string[] _chars = str.split(array.get(_pair, 1), "")  // Index 1
+        string _return = array.join(_chars, "")
+
+//Get the last timeframe values and calculate the percentChange and amountChange
+getSecurityByTimeFrame(symbol,timeFrame) =>
+
+    [openValue, closeValue, highValue, lowValue, timeValue] = request.security(symbol = symbol, timeframe = timeFrame, expression = [open[0], close[0], high[0], low[0], time[0]], gaps = barmerge.gaps_off)
+    [openValue1, closeValue1, highValue1, lowValue1, timeValue1] = request.security(symbol = symbol, timeframe = timeFrame, expression = [open[1], close[1], high[1], low[1], time[1]], gaps = barmerge.gaps_off)
+
+    percentChange = ((closeValue - closeValue1) / closeValue1) * 100
+    //amountChange = (closeValue - closeValue1 >= 0) ? (closeValue -  closeValue1): (closeValue1 - closeValue)
+    amountChange = math.abs(closeValue - closeValue1)
+    resultColor = closeValue >= closeValue1 ? bullishColor: bearishColor
+    resultTextColor = closeValue >= closeValue1 ? bullishTextColor : bearishTextColor
+
+    [getTickerName(symbol), openValue, closeValue, highValue, lowValue, timeValue,percentChange,amountChange,resultTextColor,resultColor]
+
+addTableRow(tcTable,symbol1,symbol2,symbol3,symbol4,symbol5,symbol6,symbol7,symbol8,symbol9, symbol10, symbol11, symbol12, symbol13, symbol14, symbol15, symbol16, symbol17,symbol18, timeframePeriod) =>
+
+    [tickerName1, openValue1, closeValue1, highValue1, lowValue1, timeValue1, percentChange1, amountChange1, resultTextColor1, resultColor1] = getSecurityByTimeFrame(symbol1,timeframePeriod)
+    [tickerName2, openValue2, closeValue2, highValue2, lowValue2, timeValue2, percentChange2, amountChange2, resultTextColor2, resultColor2] = getSecurityByTimeFrame(symbol2,timeframePeriod)
+    [tickerName3, openValue3, closeValue3, highValue3, lowValue3, timeValue3, percentChange3, amountChange3, resultTextColor3, resultColor3] = getSecurityByTimeFrame(symbol3,timeframePeriod)
+    [tickerName4, openValue4, closeValue4, highValue4, lowValue4, timeValue4, percentChange4, amountChange4, resultTextColor4, resultColor4] = getSecurityByTimeFrame(symbol4,timeframePeriod)
+    [tickerName5, openValue5, closeValue5, highValue5, lowValue5, timeValue5, percentChange5, amountChange5, resultTextColor5, resultColor5] = getSecurityByTimeFrame(symbol5,timeframePeriod)
+    [tickerName6, openValue6, closeValue6, highValue6, lowValue6, timeValue6, percentChange6, amountChange6, resultTextColor6, resultColor6] = getSecurityByTimeFrame(symbol6,timeframePeriod)
+    [tickerName7, openValue7, closeValue7, highValue7, lowValue7, timeValue7, percentChange7, amountChange7, resultTextColor7, resultColor7] = getSecurityByTimeFrame(symbol7,timeframePeriod)
+    [tickerName8, openValue8, closeValue8, highValue8, lowValue8, timeValue8, percentChange8, amountChange8, resultTextColor8, resultColor8] = getSecurityByTimeFrame(symbol8,timeframePeriod)
+    [tickerName9, openValue9, closeValue9, highValue9, lowValue9, timeValue9, percentChange9, amountChange9, resultTextColor9, resultColor9] = getSecurityByTimeFrame(symbol9,timeframePeriod)
+    [tickerName10, openValue10, closeValue10, highValue10, lowValue10, timeValue10, percentChange10, amountChange10, resultTextColor10, resultColor10] = getSecurityByTimeFrame(symbol10,timeframePeriod)
+    [tickerName11, openValue11, closeValue11, highValue11, lowValue11, timeValue11, percentChange11, amountChange11, resultTextColor11, resultColor11] = getSecurityByTimeFrame(symbol11,timeframePeriod)
+    [tickerName12, openValue12, closeValue12, highValue12, lowValue12, timeValue12, percentChange12, amountChange12, resultTextColor12, resultColor12] = getSecurityByTimeFrame(symbol12,timeframePeriod)
+    [tickerName13, openValue13, closeValue13, highValue13, lowValue13, timeValue13, percentChange13, amountChange13, resultTextColor13, resultColor13] = getSecurityByTimeFrame(symbol13,timeframePeriod)
+    [tickerName14, openValue14, closeValue14, highValue14, lowValue14, timeValue14, percentChange14, amountChange14, resultTextColor14, resultColor14] = getSecurityByTimeFrame(symbol14,timeframePeriod)
+    [tickerName15, openValue15, closeValue15, highValue15, lowValue15, timeValue15, percentChange15, amountChange15, resultTextColor15, resultColor15] = getSecurityByTimeFrame(symbol15,timeframePeriod)
+    [tickerName16, openValue16, closeValue16, highValue16, lowValue16, timeValue16, percentChange16, amountChange16, resultTextColor16, resultColor16] = getSecurityByTimeFrame(symbol16,timeframePeriod)
+
+    [tickerName17, openValue17, closeValue17, highValue17, lowValue17, timeValue17, percentChange17, amountChange17, resultTextColor17, resultColor17] = getSecurityByTimeFrame(symbol17,timeframePeriod) //VIX
+    [tickerName18, openValue18, closeValue18, highValue18, lowValue18, timeValue18, percentChange18, amountChange18, resultTextColor18, resultColor18] = getSecurityByTimeFrame(symbol18,'15') //ADD should be updated ever 15 mins all the time
+    addColor = closeValue18 <= addThreashold ? bearishColor : bullishColor
+
+
+    // [openValue1, closeValue1, highValue1, lowValue1, timeValue1, percentChange1, amountChange1, resultTextColor1, resultColor1] = getSecurityByTimeFrame(symbol1,timeframePeriod)
+    // [openValue2, closeValue2, highValue2, lowValue2, timeValue2, percentChange2, amountChange2, resultTextColor2, resultColor2] = getSecurityByTimeFrame(symbol2,timeframePeriod)
+    // [openValue3, closeValue3, highValue3, lowValue3, timeValue3, percentChange3, amountChange3, resultTextColor3, resultColor3] = getSecurityByTimeFrame(symbol3,timeframePeriod)
+    // [openValue4, closeValue4, highValue4, lowValue4, timeValue4, percentChange4, amountChange4, resultTextColor4, resultColor4] = getSecurityByTimeFrame(symbol4,timeframePeriod)
+    // [openValue5, closeValue5, highValue5, lowValue5, timeValue5, percentChange5, amountChange5, resultTextColor5, resultColor5] = getSecurityByTimeFrame(symbol5,timeframePeriod)
+    // [openValue6, closeValue6, highValue6, lowValue6, timeValue6, percentChange6, amountChange6, resultTextColor6, resultColor6] = getSecurityByTimeFrame(symbol6,timeframePeriod)
+    // [openValue7, closeValue7, highValue7, lowValue7, timeValue7, percentChange7, amountChange7, resultTextColor7, resultColor7] = getSecurityByTimeFrame(symbol7,timeframePeriod)
+    // [openValue8, closeValue8, highValue8, lowValue8, timeValue8, percentChange8, amountChange8, resultTextColor8, resultColor8] = getSecurityByTimeFrame(symbol8,timeframePeriod)
+    // [openValue9, closeValue9, highValue9, lowValue9, timeValue9, percentChange9, amountChange9, resultTextColor9, resultColor9] = getSecurityByTimeFrame(symbol9,timeframePeriod)
+    // [openValue10, closeValue10, highValue10, lowValue10, timeValue10, percentChange10, amountChange10, resultTextColor10, resultColor10] = getSecurityByTimeFrame(symbol10,timeframePeriod), width=5.0)
+    // [openValue11, closeValue11, highValue11, lowValue11, timeValue11, percentChange11, amountChange11, resultTextColor11, resultColor11] = getSecurityByTimeFrame(symbol11,timeframePeriod)
+    // [openValue12, closeValue12, highValue12, lowValue12, timeValue12, percentChange12, amountChange12, resultTextColor12, resultColor12] = getSecurityByTimeFrame(symbol12,timeframePeriod)
+    // [openValue13, closeValue13, highValue13, lowValue13, timeValue13, percentChange13, amountChange13, resultTextColor13, resultColor13] = getSecurityByTimeFrame(symbol13,timeframePeriod)
+    // [openValue14, closeValue14, highValue14, lowValue14, timeValue14, percentChange14, amountChange14, resultTextColor14, resultColor14] = getSecurityByTimeFrame(symbol14,timeframePeriod)
+    // [openValue15, closeValue15, highValue15, lowValue15, timeValue15, percentChange15, amountChange15, resultTextColor15, resultColor15] = getSecurityByTimeFrame(symbol15,timeframePeriod)
+    // [openValue16, closeValue16, highValue16, lowValue16, timeValue16, percentChange16, amountChange16, resultTextColor16, resultColor16] = getSecurityByTimeFrame(symbol16,timeframePeriod)
+
+    // [openValue17, closeValue17, highValue17, lowValue17, timeValue17, percentChange17, amountChange17, resultTextColor17, resultColor17] = getSecurityByTimeFrame(symbol17,timeframePeriod) //VIX
+    // [openValue18, closeValue18, highValue18, lowValue18, timeValue18, percentChange18, amountChange18, resultTextColor18, resultColor18] = getSecurityByTimeFrame(symbol18,'15') //ADD should be updated ever 15 mins all the time
+    // addColor = closeValue17 <= addThreashold ? bearishColor : bullishColor
+
+    table.cell(table_id = tcTable, column = 0, row = 0, text = timeframePeriod, bgcolor=color.new(resultColor1, tfTableOpacity), text_color=resultTextColor1, text_size=size.auto, width=5.0)
+
+    if(showPercentChange)
+        table.cell(table_id = tcTable, column = 1, row = 0, text = tickerName1 + '\n' + str.tostring(percentChange1, '#.##') + '%', bgcolor=color.new(resultColor1, tfTableOpacity), text_color=resultTextColor1, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 2, row = 0, text = tickerName2 + '\n' + str.tostring(percentChange2, '#.##') + '%', bgcolor=color.new(resultColor2, tfTableOpacity), text_color=resultTextColor2, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 3, row = 0, text = tickerName3 + '\n' + str.tostring(percentChange3, '#.##') + '%', bgcolor=color.new(resultColor3, tfTableOpacity), text_color=resultTextColor3, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 4, row = 0, text = tickerName4 + '\n' + str.tostring(percentChange4, '#.##') + '%', bgcolor=color.new(resultColor4, tfTableOpacity), text_color=resultTextColor4, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 5, row = 0, text = tickerName5 + '\n' + str.tostring(percentChange5, '#.##') + '%', bgcolor=color.new(resultColor5, tfTableOpacity), text_color=resultTextColor5, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 6, row = 0, text = tickerName6 + '\n' + str.tostring(percentChange6, '#.##') + '%', bgcolor=color.new(resultColor6, tfTableOpacity), text_color=resultTextColor6, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 7, row = 0, text = tickerName7 + '\n' + str.tostring(percentChange7, '#.##') + '%', bgcolor=color.new(resultColor7, tfTableOpacity), text_color=resultTextColor7, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 8, row = 0, text = tickerName8 + '\n' + str.tostring(percentChange8, '#.##') + '%', bgcolor=color.new(resultColor8, tfTableOpacity), text_color=resultTextColor8, text_size=size.auto, width=5.0)
+
+        table.cell(table_id = tcTable, column = 9, row = 0, text = tickerName9 + '\n' + str.tostring(percentChange9, '#.##') + '%', bgcolor=color.new(resultColor9, tfTableOpacity), text_color=resultTextColor9, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 10, row = 0, text = tickerName10 + '\n' + str.tostring(percentChange10, '#.##') + '%', bgcolor=color.new(resultColor10, tfTableOpacity), text_color=resultTextColor10, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 11, row = 0, text = tickerName11 + '\n' + str.tostring(percentChange11, '#.##') + '%', bgcolor=color.new(resultColor11, tfTableOpacity), text_color=resultTextColor11, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 12, row = 0, text = tickerName12 + '\n' + str.tostring(percentChange12, '#.##') + '%', bgcolor=color.new(resultColor12, tfTableOpacity), text_color=resultTextColor12, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 13, row = 0, text = tickerName13 + '\n' + str.tostring(percentChange13, '#.##') + '%', bgcolor=color.new(resultColor13, tfTableOpacity), text_color=resultTextColor13, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 14, row = 0, text = tickerName14 + '\n' + str.tostring(percentChange14, '#.##') + '%', bgcolor=color.new(resultColor14, tfTableOpacity), text_color=resultTextColor14, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 15, row = 0, text = tickerName15 + '\n' + str.tostring(percentChange15, '#.##') + '%', bgcolor=color.new(resultColor15, tfTableOpacity), text_color=resultTextColor15, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 16, row = 0, text = tickerName16 + '\n' + str.tostring(percentChange16, '#.##') + '%', bgcolor=color.new(resultColor16, tfTableOpacity), text_color=resultTextColor16, text_size=size.auto, width=5.0)
+
+    else
+        table.cell(table_id = tcTable, column = 1, row = 0, text = tickerName1 + '\n' + '$' + str.tostring(amountChange1, '#.##'), bgcolor=color.new(resultColor1, tfTableOpacity), text_color=resultTextColor1, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 2, row = 0, text = tickerName2 + '\n' + '$' + str.tostring(amountChange2, '#.##'), bgcolor=color.new(resultColor2, tfTableOpacity), text_color=resultTextColor2, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 3, row = 0, text = tickerName3 + '\n' + '$' + str.tostring(amountChange3, '#.##'), bgcolor=color.new(resultColor3, tfTableOpacity), text_color=resultTextColor3, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 4, row = 0, text = tickerName4 + '\n' + '$' + str.tostring(amountChange4, '#.##'), bgcolor=color.new(resultColor4, tfTableOpacity), text_color=resultTextColor4, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 5, row = 0, text = tickerName5 + '\n' + '$' + str.tostring(amountChange5, '#.##'), bgcolor=color.new(resultColor5, tfTableOpacity), text_color=resultTextColor5, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 6, row = 0, text = tickerName6 + '\n' + '$' + str.tostring(amountChange6, '#.##'), bgcolor=color.new(resultColor6, tfTableOpacity), text_color=resultTextColor6, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 7, row = 0, text = tickerName7 + '\n' + '$' + str.tostring(amountChange7, '#.##'), bgcolor=color.new(resultColor7, tfTableOpacity), text_color=resultTextColor7, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 8, row = 0, text = tickerName8 + '\n' + '$' + str.tostring(amountChange8, '#.##'), bgcolor=color.new(resultColor8, tfTableOpacity), text_color=resultTextColor8, text_size=size.auto, width=5.0)
+
+        table.cell(table_id = tcTable, column = 9, row = 0, text = tickerName9 + '\n' + '$' + str.tostring(amountChange9, '#.##'), bgcolor=color.new(resultColor9, tfTableOpacity), text_color=resultTextColor9, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 10, row = 0, text = tickerName10 + '\n' + '$' + str.tostring(amountChange10, '#.##'), bgcolor=color.new(resultColor10, tfTableOpacity), text_color=resultTextColor10, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 11, row = 0, text = tickerName11 + '\n' + '$' + str.tostring(amountChange11, '#.##'), bgcolor=color.new(resultColor11, tfTableOpacity), text_color=resultTextColor11, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 12, row = 0, text = tickerName12 + '\n' + '$' + str.tostring(amountChange12, '#.##'), bgcolor=color.new(resultColor12, tfTableOpacity), text_color=resultTextColor12, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 13, row = 0, text = tickerName13 + '\n' + '$' + str.tostring(amountChange13, '#.##'), bgcolor=color.new(resultColor13, tfTableOpacity), text_color=resultTextColor13, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 14, row = 0, text = tickerName14 + '\n' + '$' + str.tostring(amountChange14, '#.##'), bgcolor=color.new(resultColor14, tfTableOpacity), text_color=resultTextColor14, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 15, row = 0, text = tickerName15 + '\n' + '$' + str.tostring(amountChange15, '#.##'), bgcolor=color.new(resultColor15, tfTableOpacity), text_color=resultTextColor15, text_size=size.auto, width=5.0)
+        table.cell(table_id = tcTable, column = 16, row = 0, text = tickerName16 + '\n' + '$' + str.tostring(amountChange16, '#.##'), bgcolor=color.new(resultColor16, tfTableOpacity), text_color=resultTextColor16, text_size=size.auto, width=5.0)
+
+    //VIX
+    table.cell(table_id = tcTable, column = 17, row = 0, text = tickerName17 + '\n' + '$' + str.tostring(closeValue17, '#.##'), bgcolor=color.new(resultColor17, tfTableOpacity), text_color=resultTextColor17, text_size=size.auto, width=5.0)
+
+    //ADD
+    table.cell(table_id = tcTable, column = 18, row = 0, text = "ADD" + '\n' + str.tostring(closeValue18, '#.##'), bgcolor=color.new(addColor, tfTableOpacity), text_color=resultTextColor18, text_size=size.auto, width=5.0)
+
+
+//##################################################################################################
+//Ticker Details
+//SPY, QQQ, VXX, XBI, XHB, XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLY, XLV, XRT, XOP, IBB, IYT, TLT, SMH
+//##################################################################################################
+
+
+//##################################################################################################
+//FTFC
+//##################################################################################################
+// do not show timeframes that are less than the time frame selected (it will be inaccurate)
+if barstate.islast
+    //var table tcTable = table.new(position=position.top_right, columns = 28, rows = 20, frame_width=frameWidth, border_width=cellWidth)
+    var table tcTable = table.new(position=position.top_right, columns = 28, rows = 25, border_width=cellWidth)
+
+    //18 Tickers
+    // addTableRow(tcTable,"SPY","QQQ","ES1!", "NQ1!","DIA","IWM","XLK","XLC","SMH","XOP","XLE","XLP","XLU","XBI","XHB","XLB","XLY","VIX","USI:ADD",timeframeContinuity)
+    // addTableRow(tcTable,"SPY","QQQ","ES1!", "NQ1!","DIA","IWM","XLK","XLC","SMH","XOP","XLE","XLP","XLU","XBI","XHB","XLB","XLY","VIX","USI:ADD",timeframeContinuity)
+
+    spy=ticker.new(prefix="AMEX",ticker="SPY",session=syminfo.session)
+    qqq=ticker.new(prefix="NASDAQ",ticker="QQQ",session=syminfo.session)
+    es1=ticker.new(prefix="CME_MINI",ticker="ES1!",session=syminfo.session)
+    nq1=ticker.new(prefix="CME_MINI",ticker="NQ1!",session=syminfo.session)
+    xlk=ticker.new(prefix="AMEX",ticker="XLK",session=syminfo.session)
+    xlc=ticker.new(prefix="AMEX",ticker="XLC",session=syminfo.session)
+    aapl=ticker.new(prefix="NASDAQ",ticker="AAPL",session=syminfo.session)
+    goog=ticker.new(prefix="NASDAQ",ticker="GOOGL",session=syminfo.session)
+    msft=ticker.new(prefix="NASDAQ",ticker="MSFT",session=syminfo.session)
+    amzn=ticker.new(prefix="NASDAQ",ticker="AMZN",session=syminfo.session)
+    tsla=ticker.new(prefix="NASDAQ",ticker="TSLA",session=syminfo.session)
+    nvda=ticker.new(prefix="NASDAQ",ticker="NVDA",session=syminfo.session)
+    meta=ticker.new(prefix="NASDAQ",ticker="META",session=syminfo.session)
+    brk=ticker.new(prefix="NYSE",ticker="BRK.B",session=syminfo.session)
+    uhn=ticker.new(prefix="NYSE",ticker="UNH",session=syminfo.session)
+    jnj=ticker.new(prefix="NYSE",ticker="JNJ",session=syminfo.session)
+    vix=ticker.new(prefix="CBOE",ticker="VIX",session=syminfo.session)
+    add=ticker.new(prefix="USI",ticker="ADD",session=syminfo.session)
+
+    addTableRow(tcTable,spy,qqq,es1, nq1, xlk,xlc,aapl,goog,msft,amzn,tsla,nvda,meta,brk,uhn,jnj, vix,add, timeframeContinuity)
+
+    //addTableRow(tcTable,getTickerNYSE("SPY"),getTickerNasdaq("QQQ"),getTickerCMEMini("ES1!"), getTickerCMEMini("NQ1!"),getTickerNYSE("XLK"),getTickerNYSE("XLC"),getTickerNasdaq("AAPL"),getTickerNasdaq("GOOGL"),getTickerNasdaq("MSFT"),getTickerNasdaq("AMZN"),getTickerNasdaq("TSLA"),getTickerNasdaq("NVDA"),getTickerNasdaq("META"),getTickerNYSE("BRK.B"),getTickerNYSE("UNH"),getTickerNYSE("JNJ"), getTickerCBOE("VIX"),getTickerUSI("ADD"), timeframeContinuity)
+

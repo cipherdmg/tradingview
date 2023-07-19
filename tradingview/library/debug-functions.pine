@@ -1,0 +1,60 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © HeWhoMustNotBeNamed
+
+//   __    __            __       __  __                  __       __                        __      __    __              __      _______             __    __                                          __
+//  /  |  /  |          /  |  _  /  |/  |                /  \     /  |                      /  |    /  \  /  |            /  |    /       \           /  \  /  |                                        /  |
+//  $$ |  $$ |  ______  $$ | / \ $$ |$$ |____    ______  $$  \   /$$ | __    __   _______  _$$ |_   $$  \ $$ |  ______   _$$ |_   $$$$$$$  |  ______  $$  \ $$ |  ______   _____  ____    ______    ____$$ |
+//  $$ |__$$ | /      \ $$ |/$  \$$ |$$      \  /      \ $$$  \ /$$$ |/  |  /  | /       |/ $$   |  $$$  \$$ | /      \ / $$   |  $$ |__$$ | /      \ $$$  \$$ | /      \ /     \/    \  /      \  /    $$ |
+//  $$    $$ |/$$$$$$  |$$ /$$$  $$ |$$$$$$$  |/$$$$$$  |$$$$  /$$$$ |$$ |  $$ |/$$$$$$$/ $$$$$$/   $$$$  $$ |/$$$$$$  |$$$$$$/   $$    $$< /$$$$$$  |$$$$  $$ | $$$$$$  |$$$$$$ $$$$  |/$$$$$$  |/$$$$$$$ |
+//  $$$$$$$$ |$$    $$ |$$ $$/$$ $$ |$$ |  $$ |$$ |  $$ |$$ $$ $$/$$ |$$ |  $$ |$$      \   $$ | __ $$ $$ $$ |$$ |  $$ |  $$ | __ $$$$$$$  |$$    $$ |$$ $$ $$ | /    $$ |$$ | $$ | $$ |$$    $$ |$$ |  $$ |
+//  $$ |  $$ |$$$$$$$$/ $$$$/  $$$$ |$$ |  $$ |$$ \__$$ |$$ |$$$/ $$ |$$ \__$$ | $$$$$$  |  $$ |/  |$$ |$$$$ |$$ \__$$ |  $$ |/  |$$ |__$$ |$$$$$$$$/ $$ |$$$$ |/$$$$$$$ |$$ | $$ | $$ |$$$$$$$$/ $$ \__$$ |
+//  $$ |  $$ |$$       |$$$/    $$$ |$$ |  $$ |$$    $$/ $$ | $/  $$ |$$    $$/ /     $$/   $$  $$/ $$ | $$$ |$$    $$/   $$  $$/ $$    $$/ $$       |$$ | $$$ |$$    $$ |$$ | $$ | $$ |$$       |$$    $$ |
+//  $$/   $$/  $$$$$$$/ $$/      $$/ $$/   $$/  $$$$$$/  $$/      $$/  $$$$$$/  $$$$$$$/     $$$$/  $$/   $$/  $$$$$$/     $$$$/  $$$$$$$/   $$$$$$$/ $$/   $$/  $$$$$$$/ $$/  $$/  $$/  $$$$$$$/  $$$$$$$/
+//
+//
+//
+//@version=5
+indicator('Simple debug function', overlay=true)
+i_depth = input.int(7, title='Depth', step=2, minval=5, group='Usecase')
+
+//*********************** Debug method *************************//
+i_start = input.int(0, step=20, minval=0, title='Start', group='Debugger')
+i_page = input.int(100, step=20, minval=100, title='Page Size', group='Debugger')
+i_maxLogSize = input.int(1000, step=100, maxval=100000, title='Max Log Zize', group='Debugger')
+i_showHistory = input.bool(false, title='Show Historical', group='Debugger', inline='bool')
+i_showBarIndex = input.bool(false, title='Show Bar Index', group='Debugger', inline='bool')
+var DebugArray = array.new_string(0)
+var DebugBarArray = array.new_string(0)
+
+add_to_debug_array(arr, val, maxItems) =>
+    array.unshift(arr, str.tostring(val))
+    if array.size(arr) > maxItems
+        array.pop(arr)
+
+debug(debugMsg) =>
+    if barstate.islast or i_showHistory
+        barTimeString = str.tostring(year, '0000') + '/' + str.tostring(month, '00') + '/' + str.tostring(dayofmonth, '00') + (timeframe.isintraday ? '-' + str.tostring(hour, '00') + ':' + str.tostring(minute, '00') + ':' + str.tostring(second, '00') : '')
+
+        add_to_debug_array(DebugBarArray, i_showBarIndex ? str.tostring(bar_index) : barTimeString, i_maxLogSize)
+        add_to_debug_array(DebugArray, debugMsg, i_maxLogSize)
+//*********************** Debug method *************************//
+debug('Test Start')
+aIndex = 1
+for bIndex = aIndex + 1 to i_depth - 3 by 2
+    for cIndex = aIndex + 2 to i_depth - 2 by 2
+        for dIndex = aIndex + 3 to i_depth - 1 by 2
+            for eIndex = aIndex + 4 to i_depth by 2
+                if bIndex < cIndex and cIndex < dIndex and dIndex < eIndex
+                    debugMsg = str.tostring(aIndex) + ' , ' + str.tostring(bIndex) + ' , ' + str.tostring(cIndex) + ' , ' + str.tostring(dIndex) + ' , ' + str.tostring(eIndex)
+                    debug(debugMsg)
+debug('Test Finished')
+//************************************************************ Print debug message on table ********************************************************/
+var debugTable = table.new(position=position.top_right, columns=2, rows=i_page + 1, border_width=1)
+if barstate.islast and array.size(DebugArray) > 0
+    table.cell(table_id=debugTable, column=0, row=0, text=i_showBarIndex ? 'Bar Index' : 'Bar Time', bgcolor=color.teal, text_color=color.white, text_size=size.normal)
+    table.cell(table_id=debugTable, column=1, row=0, text='Debug Message', bgcolor=color.teal, text_color=color.white, text_size=size.normal)
+    for i = 0 to math.min(array.size(DebugArray) - 1 - i_start, i_page - 1) by 1
+        table.cell(table_id=debugTable, column=0, row=i + 1, text=array.get(DebugBarArray, i + i_start), bgcolor=color.black, text_color=color.white, text_size=size.normal)
+        table.cell(table_id=debugTable, column=1, row=i + 1, text=array.get(DebugArray, i + i_start), bgcolor=color.black, text_color=color.white, text_size=size.normal)
+//************************************************************ Print debug message on table ********************************************************/
+

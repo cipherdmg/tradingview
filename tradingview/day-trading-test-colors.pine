@@ -1,0 +1,541 @@
+// ||###################################################################################||
+// ||                                                                                   ||
+// ||  Day Trader Pre Market High and Low, Yesterday's High and Low, Daily High and Low ||
+// ||  https://www.tradingview.com/script/1yLZ7nkU-BB-Indicator-Marks-High-and-low-of-premarket-daily-yesterday
+// ||                                                                                   ||
+// ||###################################################################################||
+//https://www.tradingview.com/pine-script-docs
+//https://www.tradingview.com/pine-script-reference/v5
+//https://www.pinecoders.com/faq_and_code/
+//https://www.tradingview.com/pine-script-docs/en/v4/language/Functions_and_annotations.html#exceptions
+
+// varip (var intrabar persist) is the keyword used for assigning and one-time initializing of a variable. It is similar to the var keyword, but variables declared with varip retain their values between the updates of a real-time bar.
+// varip variable_name = expression
+
+//@version=5
+// indicator(title="DayTrader Market Levels", shorttitle="DayTrader Market Levels",max_bars_back = 5000, max_lines_count = 500, max_boxes_count = 500 , max_labels_count=5, overlay=true)
+indicator(title="DayTrader Market Levels", shorttitle="DayTrader Market Levels", max_bars_back = 2000, max_lines_count = 500, max_boxes_count = 500 , max_labels_count=500, overlay=true, explicit_plot_zorder=true)
+
+//    array.push(allColorsLabels,"#006400")
+//    array.push(allColorsLabels,"#91D891")
+//    array.push(allColorsLabels,"#00563F")
+//    array.push(allColorsLabels,"#013220")
+//    array.push(allColorsLabels,"#66DDAA")
+//    array.push(allColorsLabels,"#00FF00")
+//chartBackgroundColor = input.color(color.rgb(19, 23, 34,0), title="Chart Background Color", group="Colors") //#131722
+
+//Debug
+enableDebugConsole = input.bool(true, title="Enable Debug Console", group="Debug")
+chartDebugColor = input.color(color.new(#388e3c,50), title="Chart Debug Color", group="Debug") //#388e3c rgb(56,142,60,50)
+
+bullishColor = input.color(#089981, title="Bullish Candle Color", group="Colors") //#4CAF50 // Default Chart Green is #089981
+bullishColorLabel = input.color(#089981, title="Bullish Candle Label Color", group="Colors") //#4CAF50
+bullishTextColor = input.color(color.new(color.white, 0), title="Bullish Text Color", group="Colors") //#FFFFFF
+fullBodyGreenCandleColor =  input.color(#00563F, title="Bullish Full Body Candle Color", group="Colors") //#006400
+
+bearishColor = input.color(#f23645, title="Bearish Candle Color", group="Colors") //#f23645 //Default Chart Red is #f23645
+bearishColorLabel = input.color(#f23645, title="Bearish Candle Label Color", group="Colors")
+bearishTextColor = input.color(color.new(color.white, 0), title="Bearish Text Color", group="Colors")
+fullBodyRedCandleColor = input.color(#FF0000, title="Bearish Full Body Candle Color", group="Colors") //#FF0000
+
+//The Strat
+insideColor = input.color(color.new(color.yellow, 0), title="Inside Candle Color", group="The Strat")
+insideColorLabel = input.color(color.new(color.yellow, 0), title="Inside Candle Label Color", group="The Strat")
+
+outsideColor = input.color(color.new(color.fuchsia, 0), title="Outside Candle Color", group="The Strat")
+outsideColorLabel = input.color(color.new(color.fuchsia, 0), title="Outside Candle Label Ccolor", group="The Strat")
+
+showInsideCandleLabel = input.bool(true, title="Show Inside Candle Label", group="The Strat")
+showTwoUpCandleLabel = input.bool(false, title="Show 2 Up Candle Label", group="The Strat")
+showDownUpCandleLabel = input.bool(false, title="Show 2 Down Candle Label", group="The Strat")
+showOutsideCandleLabel = input.bool(true, title="Show Outside Candle Label", group="The Strat")
+
+showInsideCandleColor = input.bool(false, title="Show Inside Candle Color", group="The Strat")
+showOutsideCandleColor = input.bool(false, title="Show Outside Candle Color", group="The Strat")
+showFullBodyCandleColor = input.bool(true, title="Show Full Body Candles", group="The Strat")
+
+//Trends
+enableTrendLevels = input.bool(false, title="Enable Support and Resistance", group="Trend")
+trendToggleBreaks = input(true, title="Show Trend Breaks", group="Trend")
+atrLength = input.int(14, title="Average True Range Length", group="Trend")
+trendLength = input.int(9, title="Trend Length", group="Trend")
+trendLeftBars = input(3, title="Trend Left Bars", group="Trend")
+trendRightBars = input(3, title="Trend Right Bars", group="Trend")
+trendVolumeThresh = input(20, title="Volume Threshold", group="Trend")
+trendSupportColor = input.color(#233dee, title="Trend Support Color", group="Trend")
+trendResistanceColor = input.color(#FF0000, title="Trend Resistance Color", group="Trend")
+
+//Fibonacci
+showFibonacciLevels = input.bool(false, title="Show Fibonacci Intraday Bar", group="Fibonacci")
+fibLevel1 = input.float(0.236, "Fibonacci Level 1", minval = 0.0, step = 0.01, group="Fibonacci")
+fibLevel2 = input.float(0.382, "Fibonacci Level 2", minval = 0.0, step = 0.01, group="Fibonacci")
+fibLevel3 = input.float(0.5, "Fibonacci Level 3", minval = 0.0, step = 0.01, group="Fibonacci")
+fibLevel4 = input.float(0.618, "Fibonacci Level 4", minval = 0.0, step = 0.01, group="Fibonacci")
+fibLevel5 = input.float(0.764, "Fibonacci Level 5", minval = 0.0, step = 0.01, group="Fibonacci")
+
+// https://elitecurrensea.com/education/using-the-candlestick-wick-to-measure-true-or-fake-breakout/
+wickPercentageThreash = input.int(15, minval=1, title="Full Body Wick Percentage", group="Candle Wick")
+
+//##################################################################################################
+//Define some variables
+//##################################################################################################
+var int barsInADay=390
+
+//daily_timestamp=timestamp(2022, 09, 08, 09, 43, 22)
+
+//This shows how the user can distinguish between regular session and extended hours bars by using the built-in time function rather than the time variable
+// t = time(timeframe.period, "0930-1600")
+// plot(na(t) ? 0 : 1)
+daily_timestamp = request.security(symbol = syminfo.tickerid, timeframe = "D", expression = last_bar_time, gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+//todaysBars = ta.barssince(time("") == daily_timestamp)
+
+// barssince() returns zero on the bar where the condition is met. Lengths, however, cannot be zero, so you need to ensure the length has a minimum value of one, which can be accomplished by using max(1, len).
+// At the beginning of a dataset, until the condition is detected a first time, barssince() returns na, which also cannot be used as a length, so you must protect your calculation against this, which can be done by using nz(len).
+// The length must be an “int”, so it is safer to cast the result of your length’s calculation to an “int” using int(len).
+// Finally, a barssince() value of 0 must translate to a variable length of 1, and so on, so we must add 1 to the value returned by barssince().
+//todaysBars = int(math.max(1, nz(ta.barssince(time("") == daily_timestamp)) + 1))
+//todaysBars = int(math.max(0, nz(ta.barssince(time("") == daily_timestamp))))
+todaysBarTimeout=ta.barssince(time("") == daily_timestamp)
+todaysBars = int(math.max(1, nz(todaysBarTimeout)))
+bool inSession = not na(time('1440', "0930-1600")) and todaysBarTimeout > 0 // 1440 is the number of minutes in a whole day and 390 (bars) minutes in a trading day
+//var bool inSession = not na(time('1440', "0930-1600"))  // 1440 is the number of minutes in a whole day and 390 (bars) minutes in a trading day
+
+//draw last 15 lines
+var srLines = array.new_line()
+if array.size(srLines) > 15
+    ln = array.shift(srLines)
+    line.delete(ln)
+
+//draw last 15 labels
+var labels = array.new_label()
+if array.size(labels) > 15
+    lb = array.shift(labels)
+    label.delete(lb)
+
+//draw last 5 labels showFibonacciLevels
+var fibLabels = array.new_label()
+for i = 0 to (array.size(fibLabels) == 0 ? na : array.size(fibLabels) - 1)
+    lb = array.shift(fibLabels)
+    label.delete(lb)
+
+
+var debugTable = table.new(position = position.bottom_right, columns = 1, rows = 1, bgcolor = chartDebugColor, border_width = 1, frame_color=color.red, border_color=color.red)
+
+//Is new 30 min bar
+// is_newbar(res) =>
+//     t = time(res)
+//     not na(t) and (na(t[1]) or t > t[1])
+// plot(is_newbar("30") ? 1 : 0)
+
+
+//##################################################################################################
+//User Defined Functions
+//##################################################################################################
+
+// @function    Times the execution of a script.
+// @returns     A single value: The time elapsed since the beginning of the script, in ms.
+stopwatch() =>
+    // Get time at first bar.
+    var int timeBegin = timenow
+    // Get ms elapsed since first bar.
+    var int timeElapsed = 0
+    if not barstate.islast
+        timeElapsed := timenow - timeBegin
+    // Calculate avg/bar only when time changes.
+    var float timePerBarInMs = 0.
+    // Total bars timed before last change in "timenow".
+    var int barsTimed = 0
+    // ————— Bars elapsed since last change in "timenow".
+    var int barsNotTimed = 0
+    if ta.change(timeElapsed)
+        barsTimed := bar_index + 1
+        timePerBarInMs  := timeElapsed / barsTimed
+    // ————— In between time changes, estimate elapsed time using avg time per bar.
+    if not barstate.islast
+        // Bars elapsed since last change of time.
+        barsNotTimed := bar_index  + 1 - barsTimed
+    // ————— Add (bars since "timenow" change * avg bar time) to time elapsed since last "timenow" change to get better estimate of total time elapsed.
+    float totalTimeInMs = timeElapsed + (barsNotTimed * timePerBarInMs)
+
+// // @function calculates sma for elements in array
+// // @param source source array
+// // @returns float sma
+// sma(source, length, excludeFullBodyCandles) =>
+//     //array.avg(source)
+//     float sum = 0.0
+//     total_length=0
+
+//     for i = 0 to length
+//         if(excludeFullBodyCandles and not (isRedCandleBearish(i) or isGreenCandleBullish(i)))
+//             sum += source[i]
+//             total_length += 1
+//         else
+//             sum += source[i]
+//             total_length += 1
+
+//     sum := (sum / total_length)
+
+//     // for value in source
+//     //     if(excludeFullBodyCandles and (isRedCandleBearish())
+//     //     if currentElement > value
+//     //         result += 1
+//     //     result
+//     // for i = 0 to length - 1
+//     //     sum += source[i] / length
+//     sum
+
+// @function Checks if for given bar there was a volume spike
+// @param length - bars back to check, default is 20
+// @param ma_type - type of moving average (SMA, WMA, VWMA, RMA, HMA, LSMA, TMA, MAEMA) default: SMA
+// @ returns huge volume bar series
+// volumeSpike(simple int length = 20, simple float deviation = 2.0, simple string ma_type = "WMA" ) =>
+//     highVol = ma(volume, length, ma_type) + deviation * ta.stdev(volume, length)
+//     volumeSpike = volume >= highVol
+
+// @function        Creates an array containing the series
+// @param sources       (series int/float) The source of the values to be included.
+// @returns         (float[]) The array ID of the accumulated `src` values.
+toArray(series float sources) =>
+    var float[] values = array.new_float(0)
+    for i = 0 to  array.size(array.from(sources))
+        array.push(values,sources[i])
+
+    float[] result = values
+
+// @function Print value
+// @param message Value (string)
+debug(value) =>
+    if(enableDebugConsole)
+        table.cell(table_id = debugTable, column = 0, row = 0, text = str.tostring(value), text_color=color.new(color.white,0), text_size=size.normal)
+
+// @function Print value
+// @param message message (string)
+// @param message Value (string)
+tostringTime(value) =>
+    str.tostring(year(value)) + "-" + str.tostring(month(value)) + "-" + str.tostring(dayofmonth(value)) + "-" + str.tostring(hour(value)) + "-" + str.tostring(minute(value)) + "-" + str.tostring(second(value))
+
+// @function Conver the given value to string
+// @param format which can be format.minticks, format.percent, format.volume or some form of "#.####..." to represent decimal places
+// @returns Returns the formated string
+tostring(value, format="#.##") =>
+    str.tostring(value, format)
+
+tickFormat() =>
+    minticks = str.tostring(syminfo.mintick)
+    minticks := str.replace_all(minticks, '25', '00')
+    minticks := str.replace_all(minticks, '5', '0')
+    minticks := str.replace_all(minticks, '1', '0')
+    minticks
+
+//##################################################################################################
+//Define some variables
+//##################################################################################################
+//Time the script
+msElapsed = stopwatch()
+
+// The doji is a transitional candlestick formation, signifying equality or indecision between bulls and bears.
+isDojiCandle=(math.abs(open - close) <= (high - low) * 0.05)
+
+//The Hammer candlestick formation is viewed as a bullish reversal candlestick pattern that mainly occurs at the bottom of downtrends.
+isHammer = (((math.min(open, close) - low) > (2 * math.abs(close - open))) and ((high - math.max(close, open)) < (math.abs(close - open) / 4)))
+
+//The Inverted Hammer candlestick formation occurs mainly at the bottom of downtrends and can act as a warning of a potential bullish reversal pattern.
+isShooter = (((high - math.max(open, close)) > (2 * math.abs(close - open))) and ((math.min(close, open) - low) < (math.abs(close - open) / 4)))
+
+//The Strat inside candle
+isInsideCandle = (high <= high[1] and low >= low[1])
+
+//The Strat Outside Candle
+isOutsideCandle = (high > high[1] and low < low[1])
+
+//The Strat 2 Down Candle
+isTwoDownCandle = (low < low[1] and not (high > high[1]))
+
+//The Strat 2 Up Candle
+isTwoUpCandle= (high > high[1] and not (low < low[1]))
+
+//Green Candle
+isGreenCandle=(open < close)
+
+//Is Red Candle
+isRedCandle = (open >= close)
+
+//Candle Size
+candleSize = (math.abs(high - low))
+
+//Candle Size Average
+candleSizeAvg = ta.sma(candleSize ,barsInADay) //Over the last day
+
+//Candle Size Spike
+candleSizeSpike = (candleSize > (candleSizeAvg * 2))
+
+//Candle body size
+candleBodySize = (math.abs(open - close))
+
+//Candle Body Size Percentage
+candleBodySizePercentage = ((candleBodySize/candleSize) * 100)
+
+//Top Wick Size
+wickTop = (isGreenCandle ? (math.abs(high - close)): (math.abs(high - open)))
+
+//Top Wick Percentage Size
+topWickPercentage = ((wickTop/candleSize) * 100)
+
+//Bottom Wick Size
+wickBottom = (isGreenCandle ? math.abs(open - low) : (math.abs(close - low)))
+
+//Bottom Wick Percentage Size
+bottomWickPercentage = ((wickBottom/candleSize) * 100)
+
+//Total Wick Percentage
+wickPercentage = (((wickTop + wickBottom)/(candleSize)) * 100)
+
+//Is Bullish Green Candle
+isGreenCandleBullish = (isGreenCandle and (wickPercentage < wickPercentageThreash))
+
+//Is Bearish Red Candle
+isRedCandleBearish = (isRedCandle and (wickPercentage < wickPercentageThreash))
+
+//totalWickRange is the current bar's total wick range, which is the bar's upper and lower wick distance combined.
+totalWickRange = ((high - low) - (math.abs(close - open)))
+
+//--------------------------------------------------------------------------------------
+//Evaluate the Trend
+//Formula: max(high - low, abs(high - close[1]), abs(low - close[1]))
+atr = ta.atr(atrLength) / 2
+
+//Formula: 100 * (close - lowest(low, length)) / (highest(high, length) - lowest(low, length)).
+stoch = ta.stoch(source=close, high=close, low=close, length=trendLength)
+
+// downtrend = stoch < 50
+// uptrend = stoch > 50
+trendEMA = (ta.ema(source=close, length=trendLength))
+downtrend = (close < trendEMA)
+uptrend = (close > trendEMA)
+
+trendHighUsePivot = fixnan(ta.pivothigh(trendLeftBars, trendRightBars)[1])
+trendLowUsePivot = fixnan(ta.pivotlow(trendLeftBars, trendRightBars)[1])
+
+
+//todaysAvgBodySize= (todaysBars > 0)?(ta.sma(math.abs(open - close) ,todaysBars)) :na
+//todaysAvgBodySize= (todaysBars > 0)?(sma(math.abs(open - close) ,todaysBars,false)) :na
+//avgBodySize = ta.sma(math.abs(open - close) ,barsInADay) //Over the last day
+// avgCandleSize = ta.sma(math.abs(low - high) ,barsInADay) //Over the last day
+avgWickPercentage = ta.sma(wickPercentage ,barsInADay) //Over the last day
+
+//Fibonacci
+highest = ta.highest(high, todaysBars)
+lowest = ta.lowest(low, todaysBars)
+highestLowestWidth = highest - lowest
+
+fibonacci1 = highest - (highestLowestWidth * fibLevel1)
+fibonacci2 = highest - (highestLowestWidth * fibLevel2)
+fibonacci3 = highest - (highestLowestWidth * fibLevel3)
+fibonacci4 = highest - (highestLowestWidth * fibLevel4)
+fibonacci5 = highest - (highestLowestWidth * fibLevel5)
+
+
+//##################################################################################################
+//Start the main processing
+//  Redraw the main candles for bullish and bearish sentament
+//  Include Strat Candles
+//##################################################################################################
+
+//Change the background color [Do not do this or it won't show the water mark]
+//bgcolor(color=chartBackgroundColor, offset=0, editable=true, title="Background Color", display=display.all)
+
+bar_color=isGreenCandleBullish and showFullBodyCandleColor ? fullBodyGreenCandleColor : isRedCandleBearish and showFullBodyCandleColor ? fullBodyRedCandleColor : isInsideCandle and showInsideCandleColor? insideColor : isOutsideCandle and showOutsideCandleColor ? outsideColor : isGreenCandle? bullishColor : isRedCandle? bearishColor : na
+
+wick_color=isGreenCandle? color.new(color.green, 0)  : isRedCandle? color.new(color.red, 0) : na
+boarder_color=isGreenCandle? color.new(color.green, 0) : isRedCandle? color.new(color.red, 0) : na
+
+
+//rsi
+//boarder_color=rsi > rsi_max ? overboughtColor  : rsi < rsi_min ? oversoldColor : _isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+
+//rsi_color=rsi > rsi_max ? overboughtColor  : rsi < rsi_min ? oversoldColor : na
+//bgcolor(color=rsi_color, offset=0, editable=true, title="RSI")
+
+//Plot the main Candle
+//plotcandle(open=open, high=high, low=low, close=close, title='Candle Colors', color = bar_color, wickcolor=wick_color,bordercolor=boarder_color,display=display.all)
+barcolor(color = bar_color, offset=0, editable=true, title="Candle Colors", display=display.all)
+
+//##################################################################################################
+//The Strat the 1, 2U, 2D, 3 Strat Numbering System [size=size.auto is default]
+//##################################################################################################
+// identify 1 candles with identifier below
+plotchar(isInsideCandle and showInsideCandleLabel, title="One Bar Label", char="1", location=location.belowbar, color=insideColorLabel, size=size.tiny, display=display.all)
+
+// identify 2 up candle with identifier below and indicator above
+plotshape(isTwoUpCandle and showTwoUpCandleLabel, style=shape.arrowup, title='Two Up Bar Shape', location=location.abovebar, color=bullishColorLabel, display=display.all)
+plotchar(isTwoUpCandle and showTwoUpCandleLabel, title="Two Up Bar Label", char="2", location=location.belowbar, color=bullishColorLabel, size=size.tiny, display=display.all)
+
+// identify 2 down candle with identifier below and indicator above
+plotshape(isTwoDownCandle and showDownUpCandleLabel, style=shape.arrowdown, title="Two Bar Shape", location=location.abovebar, color=bearishColorLabel, display=display.all)
+plotchar(isTwoDownCandle and showDownUpCandleLabel, title="Two Down Bar Label", char="2", location=location.belowbar, color=bearishColorLabel, size=size.tiny, display=display.all)
+
+// identify 3 candle with indentifier below
+plotchar(isOutsideCandle and showOutsideCandleLabel, title="Three Bar Label", char="3", location=location.belowbar, color=outsideColorLabel, size=size.tiny, display=display.all)
+
+
+//##################################################################################################
+//Bullish and Bearish Signals
+//##################################################################################################
+//Plot Bullish Candle
+plotshape(series=isGreenCandleBullish, title="Bullish", style=shape.labeldown, location=location.abovebar, color=fullBodyGreenCandleColor, text="Bull", textcolor=color.new(color.white, 0), display=display.all)
+
+//Bullish typically occurred at the bottom of a down trend
+plotshape(series=isHammer and downtrend, title="Hammer Downtrend", style=shape.labeldown, location=location.abovebar, color=fullBodyGreenCandleColor, text="Hammer", textcolor=color.new(color.white, 0), display=display.all)
+//plotshape(series=isHammer and not downtrend, title="Hammer Uptrend", style=shape.labeldown, location=location.abovebar, color=fullBodyRedCandleColor, text="Hammer", textcolor=color.new(color.white, 0))
+
+//Check for Bullish Continuation Candle.   This is when the previous candle is Green and the current candle is Green.
+//Also the Low of the current candle is only retraced x% from the previous candles high
+greenContinuationCandle=((isGreenCandle) and (isGreenCandle[1])) and (((math.abs(low - high[1]) / candleSize[1]) * 100) < 10)
+//greenContinuationRetracement=((math.abs(low[0] - high[1]) / candleSize[1]) * 100)
+plotshape(series=greenContinuationCandle, title="Bullish Continuation", style=shape.labeldown, location=location.abovebar, color=fullBodyGreenCandleColor, text="Continuation", textcolor=color.new(color.white, 0), display=display.all)
+//plotshape(series=isGreenCandle, title="Bullish Continuation", style=shape.labeldown, location=location.abovebar, color=fullBodyGreenCandleColor, text=text2, textcolor=color.new(color.white, 0))
+
+//Check for Bullish Candle Spike candleSizeSpike
+plotshape(series=(isGreenCandle and candleSizeSpike), title="Bullish Candle Spike", style=shape.labeldown, location=location.abovebar, color=fullBodyGreenCandleColor, text="Spike", textcolor=color.new(color.white, 0), display=display.all)
+
+
+
+//Bearish Scenarios
+//Check for Bearish Continuation Candle.   This is when the previous candle is Red and the current candle is Red.
+//Also the High of the current candle is only retraced x% from the previous candles Low
+redContinuationCandle=((isRedCandle) and (isRedCandle[1])) and (((math.abs(high - low[1]) / candleSize[1]) * 100) < 10)
+plotshape(series=redContinuationCandle, title="Bearish Continuation", style=shape.labeldown, location=location.abovebar, color=fullBodyRedCandleColor, text="Continuation", textcolor=color.new(color.white, 0), display=display.all)
+//plotshape(series=isRedCandle, title="Bearish Continuation", style=shape.labeldown, location=location.abovebar, color=fullBodyRedCandleColor, text=str.tostring(redContinuationCandle), textcolor=color.new(color.white, 0))
+
+//Plot Bearish Candle
+plotshape(series=isRedCandleBearish, title="Bearish", style=shape.labeldown, location=location.abovebar, color=fullBodyRedCandleColor, text="Bear", textcolor=color.new(color.white, 0), display=display.all)
+
+//Bullish typically occurred at the bottom of a down trend
+plotshape(series=isShooter and uptrend, title="Shooter Uptrend", style=shape.labeldown, location=location.abovebar, color=fullBodyRedCandleColor, text="Shooter", textcolor=color.new(color.white, 0), display=display.all)
+//plotshape(series=isShooter and not uptrend, title="Shooter Downtrend", style=shape.labeldown, location=location.abovebar, color=fullBodyGreenCandleColor, text="Shooter", textcolor=color.new(color.white, 0))
+
+//Check for Bullish Candle Spike candleSizeSpike
+plotshape(series=(isRedCandle and candleSizeSpike), title="Bearish Candle Spike", style=shape.labeldown, location=location.abovebar, color=fullBodyGreenCandleColor, text="Spike", textcolor=color.new(color.white, 0), display=display.all)
+
+//##################################################################################################
+//Plot Trends
+//##################################################################################################
+// plotshape(series=not isShooter and not isHammer and not isGreenCandleBullish and not isRedCandleBearish and uptrend, title="Uptrend", style=shape.labeldown, location=location.abovebar, color=fullBodyGreenCandleColor, text='U', textcolor=color.new(color.white, 0))
+// plotshape(series=not isShooter and not isHammer and not isGreenCandleBullish and not isRedCandleBearish and downtrend, title="Downtrend", style=shape.labeldown, location=location.abovebar, color=fullBodyRedCandleColor, text='D', textcolor=color.new(color.white, 0))
+
+//Plot Trend Lines
+plot(series=((enableTrendLevels)? trendHighUsePivot: na), style=plot.style_line, color=ta.change(trendHighUsePivot) ? na : trendResistanceColor, linewidth=3, offset=-(trendRightBars + 1), title='Resistance')
+plot(series=((enableTrendLevels)? trendLowUsePivot: na), style=plot.style_line, color=ta.change(trendLowUsePivot) ? na : trendSupportColor, linewidth=3,  offset=-(trendRightBars + 1), title='Support')
+// array.new_line(srLines,line.new(x1=timeDayValue[1], y1=highDayValue[1], x2=time, xloc=xloc.bar_time, y2=highDayValue[1], extend=extend.right, color=color.green, style=line.style_dashed, width=0))
+
+//Volume %
+short = ta.ema(volume, 5)
+long = ta.ema(volume, 10)
+osc = 100 * (short - long) / long
+
+//For breaks with volume
+plotshape(enableTrendLevels and trendToggleBreaks and ta.crossunder(close, trendLowUsePivot) and not(open - close < high - open) and osc > trendVolumeThresh, title="Break", text="B", style=shape.labeldown, location=location.abovebar, color=bearishColor, textcolor=color.new(color.white, 0), size=size.tiny)
+plotshape(enableTrendLevels and trendToggleBreaks and ta.crossover(close, trendHighUsePivot) and not(open - low > close - open) and osc > trendVolumeThresh, title="Break", text="B", style=shape.labelup, location=location.belowbar, color=bullishColor, textcolor=color.new(color.white, 0), size=size.tiny)
+
+//For bull / bear wicks
+plotshape(enableTrendLevels and trendToggleBreaks and ta.crossover(close, trendHighUsePivot) and open - low > close - open, title='Break', text='Bull Wick', style=shape.labelup, location=location.belowbar, color=bullishColor, textcolor=color.new(color.white, 0), size=size.tiny)
+plotshape(enableTrendLevels and trendToggleBreaks and ta.crossunder(close, trendLowUsePivot) and open - close < high - open, title='Break', text='Bear Wick', style=shape.labeldown, location=location.abovebar, color=bearishColor, textcolor=color.new(color.white, 0), size=size.tiny)
+
+
+// alertcondition(ta.crossunder(close, lowUsePivot) and osc > volumeThresh, title='Support Broken', message='Support Broken')
+// alertcondition(ta.crossover(close, highUsePivot) and osc > volumeThresh, title='Resistance Broken', message='Resistance Broken')
+
+
+//##################################################################################################
+//Fibonacci Plotting
+//##################################################################################################
+plot(inSession and showFibonacciLevels ? fibonacci1 : na, "Fibonacci Level 1", color = bullishColor, linewidth = 1, style = plot.style_circles)
+plot(inSession and showFibonacciLevels ? fibonacci2 : na, "Fibonacci Level 2", color = bullishColor, linewidth = 1, style = plot.style_circles)
+
+mid = plot(inSession and showFibonacciLevels ? fibonacci3 : na, "Fibonacci Level 3", color = color.white, linewidth = 1, style = plot.style_circles)
+
+plot(inSession and showFibonacciLevels ? fibonacci4 : na, "Fibonacci Level 4", color = bearishColor, linewidth = 1, style = plot.style_circles)
+plot(inSession and showFibonacciLevels ? fibonacci5 : na, "Fibonacci Level 5", color = bearishColor, linewidth = 1, style = plot.style_circles)
+
+hplot = plot(inSession and showFibonacciLevels ? highest : na,"Intraday High", color = bullishColor, linewidth = 3, style = plot.style_stepline)
+lplot = plot(inSession and showFibonacciLevels ? lowest : na,"Intraday Low", color = bearishColor, linewidth = 3, style = plot.style_stepline)
+
+fill(mid, hplot, color.new(bullishColor, 95))
+fill(mid, lplot, color.new(bearishColor, 95))
+
+if(showFibonacciLevels)
+    array.push(fibLabels,label.new(x=bar_index[1] + 5, y = fibonacci1, textalign = text.align_center,color = bearishColor,textcolor = color.white,text= str.tostring(fibLevel1 * 100, "#.#") + "% " + str.tostring(fibonacci1, tickFormat()), size=size.normal, style=label.style_label_left))
+    array.push(fibLabels,label.new(x=bar_index[1] + 5, y = fibonacci2, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= str.tostring(fibLevel2 * 100, "#.#") + "% " + str.tostring(fibonacci2, tickFormat()),  size=size.normal, style=label.style_label_left))
+    array.push(fibLabels,label.new(x=bar_index[1] + 5, y = fibonacci3, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= str.tostring(fibLevel3* 100, "#.#") + "% " + str.tostring(fibonacci3, tickFormat()), size=size.normal, style=label.style_label_left))
+    array.push(fibLabels,label.new(x=bar_index[1] + 5, y = fibonacci4, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= str.tostring(fibLevel4 * 100, "#.#") + "% " + str.tostring(fibonacci4, tickFormat()), size=size.normal, style=label.style_label_left))
+    array.push(fibLabels,label.new(x=bar_index[1] + 5, y = fibonacci5, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= str.tostring(fibLevel5 * 100, "#.#") + "% " + str.tostring(fibonacci5, tickFormat()), size=size.normal, style=label.style_label_left))
+    array.push(fibLabels,label.new(x=bar_index[1] + 5, y = highest, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= "100% " + str.tostring(highest, tickFormat()), size=size.normal, style=label.style_label_left))
+    array.push(fibLabels,label.new(x=bar_index[1] + 5, y = lowest, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= "0% " + str.tostring(lowest, tickFormat()), size=size.normal, style=label.style_label_left))
+
+
+// l1Bufferlabel = label.new(x=bar_index[1] + 5,y = fibonacci1,textalign = text.align_center,color = bearishColor,textcolor = color.white,text= str.tostring(level1 * 100, "#.#") + "% " + str.tostring(fibonacci1, tickFormat()), size=size.normal, style=label.style_label_left)
+// l2Bufferlabel = label.new(x=bar_index[1] + 5, y = fibonacci2, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= str.tostring(level2 * 100, "#.#") + "% " + str.tostring(fibonacci2, tickFormat()),  size=size.normal, style=label.style_label_left)
+// l3Bufferlabel = label.new(x=bar_index[1] + 5, y = fibonacci3, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= str.tostring(level3* 100, "#.#") + "% " + str.tostring(fibonacci3, tickFormat()), size=size.normal, style=label.style_label_left)
+// l4Bufferlabel = label.new(x=bar_index[1] + 5, y = fibonacci4, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= str.tostring(level4 * 100, "#.#") + "% " + str.tostring(fibonacci4, tickFormat()), size=size.normal, style=label.style_label_left)
+// l5Bufferlabel = label.new(x=bar_index[1] + 5, y = fibonacci5, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= str.tostring(level5 * 100, "#.#") + "% " + str.tostring(fibonacci5, tickFormat()), size=size.normal, style=label.style_label_left)
+// highBufferlabel = label.new(x=bar_index[1] + 5, y = H, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= "100% " + str.tostring(Fib2, tickFormat()), size=size.normal, style=label.style_label_left)
+// lowBufferlabel = label.new(x=bar_index[1] + 5, y = L, textalign = text.align_center, color = bearishColor, textcolor = color.white, text= "0% " + str.tostring(Fib2, tickFormat()), size=size.normal, style=label.style_label_left)
+
+// //delete
+// label.delete(l1Bufferlabel[1])
+// label.delete(l2Bufferlabel[1])
+// label.delete(l3Bufferlabel[1])
+// label.delete(l4Bufferlabel[1])
+// label.delete(l5Bufferlabel[1])
+
+// label.delete(highBufferlabel[1])
+// label.delete(lowBufferlabel[1])
+
+
+
+
+// hline( 50, "+50",  color.lime, linestyle = hline.style_solid, linewidth=3, editable=true, display=display.all)
+// hline( 25, "+25",  color.green, linestyle = hline.style_solid, linewidth=3, editable=true, display=display.all)
+// hline(  0, "Zero", color.gray, linestyle = hline.style_solid, linewidth=3, editable=true, display=display.all)
+// hline(-25, "-25",  color.maroon, linestyle = hline.style_solid, linewidth=3, editable=true, display=display.all)
+// hline(-50, "-50",  color.red, linestyle = hline.style_solid, linewidth=3, editable=true, display=display.all)
+
+//daily_timestamp_string=("inSession: " + str.tostring(inSession) + "\nstoch: " + str.tostring(stoch)  + "\nlast_bar_index: " + str.tostring(last_bar_index) + " \n" + "bar_index: " + str.tostring(bar_index) + " \n" + str.tostring(year(last_bar_time)) + "-" + str.tostring(month(last_bar_time)) + "-" + str.tostring(dayofmonth(last_bar_time)) + "-" + str.tostring(hour(last_bar_time)) + "-" + str.tostring(minute(last_bar_time)) + "-" + str.tostring(second(last_bar_time)))
+
+//Candle Details
+// debugMessage="Candle Info \n" + "isGreenCandle: " +  str.tostring(isGreenCandle) + "\n isRedCandle: " +  str.tostring(isRedCandle) + "\n isGreenCandleBullish: " + str.tostring(isGreenCandleBullish)  + "\n isRedCandleBearish: " + str.tostring(isRedCandleBearish) +
+//  "\n candleSize: " + tostring(candleSize) + "\n candleBodySize: " + tostring(candleBodySize) + "\n candleBodySizePercentage: " + tostring(candleBodySizePercentage) + "\n wickTop: " + tostring(wickTop) + "\n topWickPercentage: " + str.tostring(topWickPercentage) + "\n wickBottom: " + tostring(wickBottom) +
+//   "\n bottomWickPercentage: " + str.tostring(bottomWickPercentage) + " \n totalWickRange: " + tostring(totalWickRange)  + " \n greenContinuationCandle: " + str.tostring(greenContinuationCandle)  + " \n redContinuationCandle: " + str.tostring(redContinuationCandle)
+
+debugMessage="Candle Info \n" + "isGreenCandle: " +  str.tostring(isGreenCandle) + "\n isRedCandle: " +  str.tostring(isRedCandle) + "\n isGreenCandleBullish: " + str.tostring(isGreenCandleBullish)  + "\n isRedCandleBearish: " + str.tostring(isRedCandleBearish) +
+ "\n candleSize: " + tostring(candleSize) + "\n candleBodySize: " + tostring(candleBodySize) + "\n wickTop: " + tostring(wickTop)  + "\n wickBottom: " + tostring(wickBottom) + "\n msElapsed: " + tostring(msElapsed) + " ms" + "\n candleSizeAvg: " + tostring(candleSizeAvg) +
+ "\n wickPercentage: " + tostring(wickPercentage)  + "\n avgWickPercentage: " + tostring(avgWickPercentage) + "\n candleSizeSpike: " + str.tostring(candleSizeSpike)
+
+
+//debugMessage=("inSession: " + str.tostring(inSession) + "\n todaysBarTimeout: " +  tostring(todaysBarTimeout) + "\n avgBodySize: " +  tostring(avgBodySize) + "\n msElapsed: " +  tostring(msElapsed)   + "\n trendEMA: " + tostring(trendEMA, "#") + "\n uptrend: " + str.tostring(uptrend) + "\n downtrend: " + str.tostring(downtrend) + "\n stoch: " + tostring(stoch,"#") + "\n last_bar_index: " + str.tostring(last_bar_index) + " \n bar_index: " + str.tostring(bar_index) + " \n todaysBars: " + str.tostring(todaysBars) + "\n last_bar_time: " + tostringTime(last_bar_time))
+//debugMessage=("inSession: " + str.tostring(inSession) + "\n avgBodySize: " +  tostring(avgBodySize) + "\n msElapsed: " +  tostring(msElapsed)   + "\n trendEMA: " + tostring(trendEMA, "#") + "\n uptrend: " + str.tostring(uptrend) + "\n downtrend: " + str.tostring(downtrend) + "\n stoch: " + tostring(stoch,"#") + "\n last_bar_index: " + str.tostring(last_bar_index) + " \n bar_index: " + str.tostring(bar_index) + " \n todaysBars: " + str.tostring(todaysBars) + "\n last_bar_time: " + tostringTime(last_bar_time))
+
+//debugMessage=("Fibonacci highest: " + str.tostring(highest) + "\n lowest: " + str.tostring(lowest)  + "\n highestLowestWidth: " + str.tostring(highestLowestWidth))
+//debugMessage=("Fibonacci highest: " + str.tostring(highest) + "\n lowest: " + str.tostring(lowest))
+//debug(debugMessage)
+
+//array.push(labels,label.new(x=bar_index, y=na, text=debugMessage,yloc = yloc.abovebar,color = chartDebugColor, textcolor = color.new(color.white,0), size = size.normal))
+//label.new(x=bar_index, y=na, text=debugMessage ,yloc = yloc.abovebar,color = chartDebugColor, textcolor = color.new(color.white,0), size = size.normal)
+
+//array.push(labels,label.new(x=bar_index, y=na, text=debugMessage,yloc = yloc.abovebar,color = bullishColor, textcolor = color.new(color.white,0), size = size.normal))
+
+// if((isGreenCandle) and (isGreenCandle[1]))
+//     msg1 = (math.abs(low - high[1]))
+//     msg2 = candleSize[1]
+//     msg3 = (((math.abs(low - high[1]) / candleSize[1]) * 100))
+//     msg4 = "low-high[1]: " +  str.tostring(msg1) + "\n candleSize[1]: " +  str.tostring(msg2) + "\n msg3: " +  str.tostring(msg3)
+//     label.new(x=bar_index, y=na, text=str.tostring(msg4) ,yloc = yloc.abovebar,color = chartDebugColor, textcolor = color.new(color.white,0), size = size.normal)
+
+if barstate.islast or barstate.isrealtime
+    //formatDate:=("candleTopWickSize: " + str.tostring(candleTopWickSize(0)) + "\ncandleBottomWickSize: " + str.tostring(candleBottomWickSize(0)) + "\nandleSize: " + str.tostring(candleSize(0)) +  "\nwickTop: " + str.tostring(getWickTopPercentage(0)) + "\nwickBottom: " + str.tostring(getWickBottomPercentage(0)))
+    //label.new(bar_index, na, "formatDate \n" + str.tostring(formatDate) , yloc = yloc.abovebar, color = color.new(color.blue,0))
+    //textValue=("ValueTestedMaxNoOfTimes: " + str.tostring(ValueTestedMaxNoOfTimes) + "\n H1_ValueRepeatedMax: " + str.tostring(H1_ValueRepeatedMax) + "\n L1_ValueRepeatedMax: " + str.tostring(L1_ValueRepeatedMax))
+    //label.new(x=bar_index, y=na, text=textValue,yloc = yloc.abovebar,color = bullishColor, textcolor = color.new(color.white,0), size = size.normal)
+    //label.new(x=bar_index, y=na, text=daily_timestamp_string,yloc = yloc.abovebar,color = bullishColor, textcolor = color.new(color.white,0), size = size.normal)
+    debug(debugMessage)
+

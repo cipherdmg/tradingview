@@ -1,0 +1,269 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © gliderfund
+
+//@version=5
+
+// @description This Library focuses in functions related to pivot highs and lows and some of their applications (i.e. divergences, zigzag, harmonics, support and resistance...)
+library(title = "Pivots", overlay = true)
+
+
+
+
+// #############################################
+// #############################################
+//            PIVOT HIGH & LOW
+// #############################################
+// #############################################
+
+// @function          Delivers series of pivot highs, lows and zigzag.
+// @param srcH        Source series to look for pivot highs. Stricter applications might source from 'close' prices. Oscillators are also another possible source to look for pivot highs and lows. By default 'high'
+// @param srcL        Source series to look for pivot lows. By default 'low'
+// @param length      This value represents the minimum number of candles between pivots. The lower the number, the more detailed the pivot profile. The higher the number, the more relevant the pivots. By default 10
+// @returns           [pivotHigh, pivotLow]
+export pivots(series float srcH = high, series float srcL = low, simple int length = 10) =>
+
+    // Pivot Highs
+    float pivotHigh = nz(srcH[length])
+    if length == 0
+        pivotHigh
+    else
+        pivotHFound = true
+        for i = 0 to math.abs(length - 1)
+            if srcH[i] > pivotHigh
+                pivotHFound := false
+                break
+        for i = length + 1 to (2 * length)
+            if srcH[i] >= pivotHigh
+                pivotHFound := false
+                break
+        if not pivotHFound and (length * 2 <= bar_index)
+            pivotHigh := float(na)
+
+    // Pivot Lows
+    float pivotLow = nz(srcL[length])
+    if length == 0
+        pivotLow
+    else
+        pivotLFound = true
+        for i = 0 to math.abs(length - 1)
+            if srcL[i] < pivotLow
+                pivotLFound := false
+                break
+        for i = length + 1 to (2 * length)
+            if srcL[i] <= pivotLow
+                pivotLFound := false
+                break
+        if not pivotLFound and (length * 2 <= bar_index)
+            pivotLow := float(na)
+
+    // Result
+    [pivotHigh, pivotLow]
+
+    // End of Function
+
+
+
+
+// #############################################
+// #############################################
+//            ZIGZAG ARRAY/SERIES
+// #############################################
+// #############################################
+
+// @function          Delivers a Zigzag series based on alternating pivots. Ocasionally this line could paint a few consecutive lows or highs without alternating. That happens because it's finding a few consecutive Higher Highs or Lower Lows. If to use lines entities instead of series, that could be easily avoided. But in this one, I'm more interested outputting series rather than painting/deleting line entities.
+// @param pivotHigh   Pivot high series
+// @param pivotLow    Pivot low series
+// @returns           [zigzagSeries, zigzagValues, zigzagIndex, zigzagPivot]
+export zigzagArray(series float pivotHigh, series float pivotLow) =>
+    // Arrays
+    float[] zigzagValues = array.new_float(0)
+    int[]   zigzagIndex  = array.new_int(0)
+    bool[]  zigzagPivot  = array.new_bool(0)  // true: Pivot High, false: Pivot Low
+    float[] zigzagSeries = array.new_float(0)
+
+    // Defines the origin values for each Line
+    int indexPrevPivot = na
+    float prevValue    = na
+    int prevIndex      = na
+    bool prevPivot     = na
+
+    // Get values from last pivot
+    if array.size(zigzagPivot) > 0
+        indexPrevPivot := array.size(zigzagPivot) - 1
+        prevValue := array.get(zigzagValues, indexPrevPivot)
+        prevIndex := array.get(zigzagIndex, indexPrevPivot)
+        prevPivot := array.get(zigzagPivot, indexPrevPivot)
+
+    // Actions on Pivot Points
+    if pivotLow  // Actions on a Pivot Low
+        if prevPivot or na(prevPivot)  // Last recorded pivot was a High or na
+            array.push(zigzagValues, pivotLow)
+            array.push(zigzagIndex, bar_index)
+            array.push(zigzagPivot, false)
+            array.push(zigzagSeries, pivotLow)
+
+        else // Last recorded pivot was a Low
+            if prevValue > pivotLow // If current Low is Lower
+                array.pop(zigzagValues)
+                array.pop(zigzagIndex)
+                array.set(zigzagSeries, prevIndex, na)
+                array.push(zigzagValues, pivotLow)
+                array.push(zigzagIndex, bar_index)
+                array.push(zigzagSeries, pivotLow)
+            else
+                array.push(zigzagSeries, na)
+
+    else if pivotHigh  // Actions on a Pivot High
+        if not prevPivot or na(prevPivot)  // Last recorded pivot was a Low or na
+            array.push(zigzagValues, pivotHigh)
+            array.push(zigzagIndex, bar_index)
+            array.push(zigzagPivot, true)
+            array.push(zigzagSeries, pivotHigh)
+
+        else // Last recorded pivot was a High
+            if prevValue < pivotHigh // If current High is Higher
+                array.pop(zigzagValues)
+                array.pop(zigzagIndex)
+                array.set(zigzagSeries, prevIndex, na)
+                array.push(zigzagValues, pivotHigh)
+                array.push(zigzagIndex, bar_index)
+                array.push(zigzagSeries, pivotHigh)
+            else
+                array.push(zigzagSeries, na)
+
+    else
+        array.push(zigzagSeries, na)
+
+    // Result
+    [zigzagSeries, zigzagValues, zigzagIndex, zigzagPivot]
+
+// End of Function
+
+
+
+// #############################################
+// #############################################
+//            ZIGZAG LINE
+// #############################################
+// #############################################
+
+// @function          Delivers a Zigzag based on line entities.
+// @param srcH        Source series to look for pivot highs. Stricter applications might source from 'close' prices. Oscillators are also another possible source to look for pivot highs and lows. By default 'high'
+// @param srcL        Source series to look for pivot lows. By default 'low'
+// @param colorLine    Color of the Zigzag Line. By default Fuchsia
+// @param widthLine   Width of the Zigzag Line. By default 4
+// @returns           Zigzag printed on screen
+export zigzagLine(simple int length = 10, series float srcH = high, series float srcL = low, simple color colorLine = #FF00FF, simple int widthLine = 4) =>
+    // Function inspired from Tr0st's Zig Zag High Low Indicator: https://www.tradingview.com/script/I2xTwDzy-Zig-Zag-High-Low
+    // Vars
+    var lastPivotHigh = 0.0
+    var barHigh = bar_index
+    var lastPivotLow = math.pow(srcH, 10)
+    var barLow = bar_index
+    var upWeGo = false
+
+    // Define the Line parameters
+    var line zLine = na
+
+    // Pivot Points
+    pivotHigh = ta.highest(srcH, length * 2 + 1)
+    pivotLow  = ta.lowest(srcL, length * 2 + 1)
+
+    if upWeGo
+        if (pivotLow == low[length] and low[length] < lastPivotLow)  // If current Pivot Low is Lower than the last recorded one...
+            lastPivotLow := low[length]
+            barLow       := bar_index
+            line.delete(zLine)
+            zLine := line.new(x1 = barHigh - length, y1 = lastPivotHigh, x2 = barLow - length, y2 = lastPivotLow, xloc = xloc.bar_index, extend = extend.none, color = colorLine, style = line.style_solid, width = widthLine)
+
+        if (pivotHigh == high[length] and high[length] > lastPivotLow)  // If current Pivot High is Higher than the last Pivot Low...
+            lastPivotHigh := high[length]
+            barHigh := bar_index
+            upWeGo := false
+            zLine := line.new(x1 = barHigh - length, y1 = lastPivotHigh, x2 = barLow - length, y2 = lastPivotLow, xloc = xloc.bar_index, extend = extend.none, color = colorLine, style = line.style_solid, width = widthLine)
+
+    else
+        if (pivotHigh == high[length] and high[length] > lastPivotHigh)  // If current Pivot High is Higher than the last recorded one...
+            lastPivotHigh := high[length]
+            barHigh := bar_index
+            line.delete(zLine)
+            zLine := line.new(x1 = barHigh - length, y1 = lastPivotHigh, x2 = barLow - length, y2 = lastPivotLow, xloc = xloc.bar_index, extend = extend.none, color = colorLine, style = line.style_solid, width = widthLine)
+
+        if (pivotLow == low[length] and low[length] < lastPivotHigh)  // If current Pivot Low is Lower than the last Pivot High...
+            lastPivotLow := low[length]
+            barLow := bar_index
+            upWeGo := true
+            zLine := line.new(x1 = barHigh - length, y1 = lastPivotHigh, x2 = barLow - length, y2 = lastPivotLow, xloc = xloc.bar_index, extend = extend.none, color = colorLine, style = line.style_solid, width = widthLine)
+
+// End of Function
+
+
+
+
+// #############################################
+// #############################################
+//            DIVERGENCES
+// #############################################
+// #############################################
+
+// @function              Calculates divergences between 2 series
+// @param h2              Series in which to locate divs: Highs
+// @param l2              Series in which to locate divs: Lows
+// @param h1              Series in which to locate pivots: Highs. By default high
+// @param l1              Series in which to locate pivots: Lows. By default low
+// @param length          Length used to calculate Pivots: By default 10
+// @returns               [actualH2, actualL2, actualH1, actualL1, bullRegDiv, bearRegDiv, bullHidDiv, bearHidDiv, bullRegDivRT, bearRegDivRT, bullHidDivRT, bearHidDivRT]
+export divergence(series float h2, series float l2, series float h1 = high, series float l1 = low, simple int length = 10) =>
+    // Pivots
+    [pivotHigh, pivotLow] = pivots(h1, l1, length)
+
+    // Pivot Highs
+    valueLastH1  = ta.valuewhen(pivotHigh, h1[length], 0)
+    valuePastH1  = ta.valuewhen(pivotHigh, h1[length], 1)
+    actualH1     = pivotHigh
+    pastH1       = actualH1 ? valuePastH1 : na
+    lastH1       = valueLastH1
+    // Pivot Lows
+    valueLastL1  = ta.valuewhen(pivotLow, l1[length], 0)
+    valuePastL1  = ta.valuewhen(pivotLow, l1[length], 1)
+    actualL1     = pivotLow
+    pastL1       = actualL1 ? valuePastL1 : na
+    lastL1       = valueLastL1
+
+    // Div Highs
+    valueActualH2 = ta.valuewhen(pivotHigh, h2[length], 0)
+    valuePastH2   = ta.valuewhen(pivotHigh, h2[length], 1)
+    actualH2      = actualH1 ? valueActualH2 : na
+    pastH2        = actualH1 ? valuePastH2 : na
+    lastH2        = valueActualH2
+    // Div Lows
+    valueActualL2 = ta.valuewhen(pivotLow, l2[length], 0)
+    valuePastL2   = ta.valuewhen(pivotLow, l2[length], 1)
+    actualL2      = actualL1 ? valueActualL2 : na
+    pastL2        = actualL1 ? valuePastL2 : na
+    lastL2        = valueActualL2
+
+    // Conditions
+    // RT conditions: Real Time Potential Divergence Building
+    // Regular Bullish Divergence
+    bullRegDiv   = (actualL1 < pastL1) and (actualL2 > pastL2)
+    bullRegDivRT = barstate.islast and (l1[0] < lastL1) and (l2[0] > lastL2)
+    // Regular Bearish Divergence
+    bearRegDiv   = (actualH1 > pastH1) and (actualH2 < pastH2)
+    bearRegDivRT = barstate.islast and (h1[0] > lastH1) and (h2[0] < lastH2)
+    // Hidden Bullish Divergence
+    bullHidDiv   = (actualL1 > pastL1) and (actualL2 < pastL2)
+    bullHidDivRT = barstate.islast and (l1[0] > lastL1) and (l2[0] < lastL2)
+    // Hidden Bearish Divergence
+    bearHidDiv   = (actualH1 < pastH1) and (actualH2 > pastH2)
+    bearHidDivRT = barstate.islast and (h1[0] < lastH1) and (h2[0] > lastH2)
+
+    // Result
+    [actualH2, actualL2, actualH1, actualL1, bullRegDiv, bearRegDiv, bullHidDiv, bearHidDiv, bullRegDivRT, bearRegDivRT, bullHidDivRT, bearHidDivRT]
+
+    // End of Function
+
+
+
+// Example
+zigzagLine()

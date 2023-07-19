@@ -1,0 +1,442 @@
+//@version=5
+// ||###################################################################################||
+// ||                                                                                   ||
+// || Cipher DMG
+// || The Strat                                                                         ||
+// ||     What are the 1s, 2s, & 3s                                                     ||
+// ||                                                                                   ||
+// ||                                                                                   ||
+// ||###################################################################################||
+
+//strategy('The Strat', shorttitle='The Strat', overlay=true, process_orders_on_close=true, initial_capital=100000, default_qty_type=strategy.fixed, default_qty_value=1, commission_type=strategy.commission.cash_per_order, pyramiding=1, commission_value=2.00)
+indicator(title="The Strat", shorttitle="The Strat", max_labels_count = 500, overlay=true)
+
+//388e3c - Green [rgb(56,142,60)]
+//b22833 - Red [rgb(178,40,51)]
+
+bullishColor = input.color(color.new(color.green, 0), title='Bullish Candle Color', group='Colors')
+bullishColorLabel = input.color(color.new(color.green, 0), title='Bullish Candle Label Color', group='Colors')
+bullishTextColor = input.color(color.new(color.white, 0), title='Bullish Text Color', group='Colors')
+// bullishColor = input.color(color.rgb(56,142,60), title='Bullish Candle Color', group='Colors')
+// bullishColorLabel = input.color(color.rgb(56,142,60), title='Bullish Candle Label Color', group='Colors')
+fullBodyGreenCandleColor = input.color(color.rgb(112,204,189), title='Bullish Full Body Candle Color', group='Colors')
+
+bearishColor = input.color(color.new(color.red, 0), title='Bearish Candle Color', group='Colors')
+bearishColorLabel = input.color(color.new(color.red, 0), title='Bearish Candle Label Color', group='Colors')
+bearishTextColor = input.color(color.new(color.white, 0), title='Bearish Text Color', group='Colors')
+// bearishColor = input.color(color.rgb(178,40,51), title='Bearish Candle Color', group='Colors')
+// bearishColorLabel = input.color(color.rgb(178,40,51), title='Bearish Candle Label Color', group='Colors')
+fullBodyRedCandleColor = input.color(color.rgb(250,161,164), title='Bearish Full Body Candle Color', group='Colors')
+
+insideColor = input.color(color.new(color.yellow, 0), title='Inside Candle Color', group='Colors')
+insideColorLabel = input.color(color.new(color.yellow, 0), title='Inside Candle Label Color', group='Colors')
+
+outsideColor = input.color(color.new(color.fuchsia, 0), title='Outside Candle Color', group='Colors')
+outsideColorLabel = input.color(color.new(color.fuchsia, 0), title='Outside Candle Label Ccolor', group='Colors')
+
+showInsideCandleColor = input.bool(true, title='Show Inside Candle Color', group='Enable Candle Colors')
+showOutsideCandleColor = input.bool(true, title='Show Outside Candle Color', group='Enable Candle Colors')
+showFullBodyCandleColor = input.bool(true, title='Show Full Body Candles', group='Enable Candle Colors')
+
+//RSI
+//Plot the Relative Strength Index (RSI) when its over 70 and under 30
+rsi_len = input.int(14, minval=1, title="RSI Length", group='RSI')
+rsi_src = input(close, "RSI Source", group='RSI')
+rsi_min = input.int(30, minval=1, title="RSI Minimum Threshold", group='RSI')
+rsi_max = input.int(70, minval=1, title="RSI Maximum Threshold", group='RSI')
+
+// overboughtColor = input.color(color.new(color.white, 0), title='Overbought Color', group='Colors')
+// oversoldColor = input.color(color.new(color.aqua, 0), title='Oversold Color', group='Colors')
+overboughtColor = input.color(color.new(color.red,80), title='Overbought Color', group='Colors')
+oversoldColor = input.color(color.new(color.green, 80), title='Oversold Color', group='Colors')
+
+// https://elitecurrensea.com/education/using-the-candlestick-wick-to-measure-true-or-fake-breakout/
+wickPercentage = input.int(15, minval=1, title="Full Body Wick Percentage", group='Candle Wick')
+
+showDailyTargets = input.bool(true, title='Show Daily, Pre/Post Market and Previous Day Targets', group='Support and Resistance')
+
+//timeAndDateInput = input.time(timestamp("1 Aug 2021 00:00 +0300"), "Date and time")
+
+// string sessionInput = input.session("0930-0935",title="Bullish or Bearish Candle based on Intraday Average", "Session")
+// inSession = not na(time(timeframe.period, sessionInput))
+// // intradaySession = InSession("0930-1600", "GMT-5")
+
+//ta.sma(ta,abs(high-low),)
+
+//rsi_color = rsi > rsi_max ? color.new(color.red,80)  : rsi < rsi_min ? color.new(color.green, 80) : na
+
+
+///////////////////////////////////////////////
+// END: user input
+///////////////////////////////////////////////
+
+//##################################################################################################
+//Functions
+//##################################################################################################
+
+
+// @function The given candle is up where the open is less then the close for the given index
+// @param idx index to use
+// @return true if the indexed candle is Green
+isGreenCandle(int idx) =>
+    open[idx] < close[idx]
+
+// @function The given candle is up where the open is less then the close for the given index
+//  Candle high minus candle low = candle size
+//  High of candle minus candle close = wick on top of candle
+//  Open of candle minus candle low = wick on bottom of candle
+// @return true if the indexed candle is Green
+isGreenCandleBullish(int idx) =>
+
+    candleSize = math.abs((high[idx]) - (low[idx]))
+    wickTop = math.abs((high[idx]) - (close[idx]))
+    wickBottom = math.abs((open[idx]) - (low[idx]))
+    (((wickTop + wickBottom)/candleSize) * 100) < wickPercentage
+
+    // if(inSession)
+    //     (((wickTop + wickBottom)/candleSize) * 100) < wickPercentage
+
+    //     // Compute the 15-bar average of the bar's body range
+    // avgBody = ta.sma(BodyRange(), 15)
+
+// @function The given candle is up where the open is greater then or equal to the close for the given index
+// @param idx index to use
+// @return true if the indexed candle is Red
+isRedCandle(int idx) =>
+    open[idx] >= close[idx]
+
+// @function The given candle is up where the open is greater then or equal to the close for the given index
+// Candle high minus candle low = candle size
+// High of candle minus candle open = wick on top of candle
+// Close of candle minus candle low = wick on bottom of candle
+// @return true if the indexed candle is Red
+isRedCandleBearish(int idx) =>
+    candleSize = math.abs((high[idx]) - (low[idx]))
+    wickTop = math.abs((high[idx]) - (open[idx]))
+    wickBottom = math.abs((close[idx]) - (low[idx]))
+    (((wickTop + wickBottom)/candleSize) * 100) < wickPercentage
+
+// @function Entire Candle wick to wick is inside the previous candle.  This is considered a Scenario 1.
+// It means its consolidation on a smaller timeframe  We do not want to trade things on a 1 because it has Not picked its direction.
+// @param idx index to use
+// @returns
+isInsideCandle(int idx) =>
+    high[idx] <= high[idx + 1] and low[idx] >= low[idx + 1]
+
+//@function Candle engulfs the previous candle and is typically the larges bar.  This is considered a Scenario 3
+//Most commonly 3s occur after 1
+//@return
+isOutsideCandle(int idx) =>
+    high[idx] > high[idx + 1] and low[idx] < low[idx + 1]
+
+
+//2
+//@function  Down Directional Candle which broke the previous candle's low
+isTwoDownCandle(int idx) =>
+    low[idx] < low[idx + 1] and not (high[idx] > high[idx + 1])
+
+
+//2
+//@function Up Directional Candle which broke the previous candle's low
+isTwoUpCandle(int idx) =>
+    high[idx] > high[idx + 1] and not (low[idx] < low[idx + 1])
+
+
+// reusable bar identifier functions for series
+isInsideCandleSeries(highSeries, lowSeries) =>
+    highSeries[0] <= highSeries[1] and lowSeries[0] >= lowSeries[1]
+
+isOutsideCandleSeries(highSeries, lowSeries) =>
+    highSeries[0] > highSeries[1] and lowSeries[0] < lowSeries[1]
+
+
+// getAverageBodyRanage() returns the current bar's candle range, which is
+// the absolute close to open price difference.
+getAverageBodyRanage() =>
+    math.abs(close - open)
+
+///////////////////////////////////////////////
+// END: Functions & Logic
+///////////////////////////////////////////////
+
+
+//##################################################################################################
+//The Strat Combinations
+//
+
+
+//##################################################################################################
+//Plot the 1, 2U, 2D, 3 Strat Numbering System
+//##################################################################################################
+
+// identify 1 candles with identifier below
+plotchar(isInsideCandle(0), title='One Bar Label', char='1', location=location.belowbar, color=insideColorLabel, display=display.all)
+
+// identify 2 up candle with identifier below and indicator above
+plotshape(isTwoUpCandle(0), style=shape.arrowup, title='Two Up Bar Shape', location=location.abovebar, color=bullishColorLabel, display=display.all)
+plotchar(isTwoUpCandle(0), title='Two Up Bar Label', char='2', location=location.belowbar, color=bullishColorLabel, display=display.all)
+
+// identify 2 down candle with identifier below and indicator above
+plotshape(isTwoDownCandle(0), style=shape.arrowdown, title='Two Bar Shape', location=location.abovebar, color=bearishColorLabel, display=display.all)
+plotchar(isTwoDownCandle(0), title='Two Down Bar Label', char='2', location=location.belowbar, color=bearishColorLabel, display=display.all)
+
+// identify 3 candle with indentifier below
+plotchar(isOutsideCandle(0), title='Three Bar Label', char='3', location=location.belowbar, color=outsideColorLabel, display=display.all)
+
+//##################################################################################################
+// Change Bar Color
+//##################################################################################################
+// barcolor(color=getBarColor())
+_isInsideCandle = isInsideCandle(0)
+_isOutsideCandle = isOutsideCandle(0)
+_isGreenCandle = isGreenCandle(0)
+_isRedCandle = isRedCandle(0)
+_isGreenCandleBullish = isGreenCandleBullish(0)
+_isRedCandleBearish = isRedCandleBearish(0)
+
+//RSI over the last 3 candles
+rsi = ta.rsi(rsi_src, rsi_len)
+
+//bar_color=_isInsideCandle and showInsideCandleColor? insideColor : _isOutsideCandle and showOutsideCandleColor ? outsideColor : _isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+bar_color=_isGreenCandleBullish and showFullBodyCandleColor ? fullBodyGreenCandleColor : _isRedCandleBearish and showFullBodyCandleColor ? fullBodyRedCandleColor : _isInsideCandle and showInsideCandleColor? insideColor : _isOutsideCandle and showOutsideCandleColor ? outsideColor : _isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+
+wick_color=_isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+boarder_color=_isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+
+//rsi
+//boarder_color=rsi > rsi_max ? overboughtColor  : rsi < rsi_min ? oversoldColor : _isGreenCandle? bullishColor : _isRedCandle? bearishColor : na
+
+//rsi_color=rsi > rsi_max ? overboughtColor  : rsi < rsi_min ? oversoldColor : na
+//bgcolor(color=rsi_color, offset=0, editable=true, title="RSI")
+
+//barcolor(color= bar_color,offset=0,editable=true)
+plotcandle(open, high, low, close, title="Candle Colors", color = bar_color, wickcolor=wick_color,bordercolor=boarder_color)
+
+
+
+//##################################################################################################
+// Plot Daily, Pre-Market and PostMarket and Previous Day's high and low value
+//##################################################################################################
+
+// //Daily high and low
+// dailyhigh = request.security(syminfo.tickerid, 'D', high)
+// dailylow = request.security(syminfo.tickerid, 'D', low)
+
+// //Yesterday high and low
+// previousdayhigh = request.security(syminfo.tickerid, 'D', high[1])
+// previousdaylow = request.security(syminfo.tickerid, 'D', low[1])
+
+// //Premarket high and low
+// t = time('1440', '0000-0930:23456')  // 1440 is the number of minutes in a whole day.
+// is_first = na(t[1]) and not na(t) or t[1] < t
+// ending_hour = 9
+// ending_minute = 30
+
+// pm_high = float(na)
+// pm_low = float(na)
+// k = int(na)
+
+// //Get the first premarket candle for the initial high and low
+// if is_first and barstate.isnew and (hour < ending_hour or hour >= 16 or hour == ending_hour and minute < ending_minute)
+//     pm_high := high
+//     pm_low := low
+//     pm_low
+// else
+//     pm_high := pm_high[1]
+//     pm_low := pm_low[1]
+//     pm_low
+
+// //Now get the next candles high and if its in premarket then its the new pre-market high
+// if high > pm_high and (hour < ending_hour or hour >= 16 or hour == ending_hour and minute < ending_minute)
+//     pm_high := high
+//     pm_high
+
+// //Now get the next candles low and if its in premarket then its the new pre-market low
+// if low < pm_low and (hour < ending_hour or hour >= 16 or hour == ending_hour and minute < ending_minute)
+//     pm_low := low
+//     pm_low
+
+// LastOnly = true
+
+// if LastOnly == true
+//     k := -9999
+//     k
+// else
+//     k := 0
+//     k
+
+// //Just a variable here for the label coordinates
+// td = time - time[5]
+
+
+// // if(showDailyTargets)
+// //Daily high and low lines
+// plot(series=showDailyTargets ? dailyhigh : na, style=plot.style_line, title='Daily high', color=color.new(#FFFFFF, 0), linewidth=2, trackprice=true, offset=k)
+// if(showDailyTargets)
+//     dh = label.new(x=time + td, y=dailyhigh, text='Daily high', xloc=xloc.bar_time, yloc=yloc.price, style=label.style_none, textcolor=#FFFFFF, size=size.normal, textalign=text.align_right)
+//     label.delete(dh[1])
+
+// plot(series=showDailyTargets ? dailylow : na, style=plot.style_line, title='Daily low', color=color.new(#8300FF, 0), linewidth=2, trackprice=true, offset=k)
+// if(showDailyTargets)
+//     dl = label.new(x=time + td, y=dailylow, text='Daily low', xloc=xloc.bar_time, yloc=yloc.price, style=label.style_none, textcolor=#8300FF, size=size.normal, textalign=text.align_right)
+//     label.delete(dl[1])
+
+// //Previous day high and low lines
+// plot(series=showDailyTargets ? previousdayhigh : na, style=plot.style_line, title='Yesterday\'s high', color=color.new(#FF6800, 0), linewidth=2, trackprice=true, offset=k)
+// if(showDailyTargets)
+//     pdh = label.new(x=time + td, y=previousdayhigh, text='Yesterday\'s high', xloc=xloc.bar_time, yloc=yloc.price, style=label.style_none, textcolor=#FF6800, size=size.normal, textalign=text.align_right)
+//     label.delete(pdh[1])
+
+// plot(series=showDailyTargets ? previousdaylow : na, style=plot.style_line, title='Yesterday\'s low', color=color.new(#00ECFF, 0), linewidth=2, trackprice=true, offset=k)
+// if(showDailyTargets)
+//     pdl = label.new(x=time + td, y=previousdaylow, text='Yesterday\'s low', xloc=xloc.bar_time, yloc=yloc.price, style=label.style_none, textcolor=#00ECFF, size=size.normal, textalign=text.align_right)
+//     label.delete(pdl[1])
+
+// //Premarket high and low lines
+// plot(series=showDailyTargets ? pm_high : na, style=plot.style_line, title='Premarket high', trackprice=true, color=color.new(#16F000, 0), linewidth=2, offset=k)
+// if(showDailyTargets)
+//     pmh = label.new(x=time + td, y=pm_high, text='Premarket high', xloc=xloc.bar_time, yloc=yloc.price, style=label.style_none, textcolor=#16F000, size=size.normal, textalign=text.align_right)
+//     label.delete(pmh[1])
+
+// plot(series=showDailyTargets ? pm_low : na, style=plot.style_line, title='Premarket low', trackprice=true, color=color.new(#FF0000, 0), linewidth=2, offset=k)
+// if(showDailyTargets)
+//     pml = label.new(x=time + td, y=pm_low, text='Premarket low', xloc=xloc.bar_time, yloc=yloc.price, style=label.style_none, textcolor=#FF0000, size=size.normal, textalign=text.align_right)
+//     label.delete(pml[1])
+
+
+// // Lets check the current candle and see if the previous candle is a 1 and if so then lets check if the next candle is a win or loss
+
+// stateText(stratPattern, stopLevel, targetPrice, riskReward) =>
+//     string txt = ""
+//     txt += "stratPattern: " + str.tostring(stratPattern) + "\n"
+//     txt += "stopLevel: " + str.tostring(stopLevel) + "\n"
+//     txt += "targetPrice: " + str.tostring(targetPrice) + "\n"
+//     txt += "riskReward: " + str.tostring(riskReward)
+
+// stateText3(stratPattern1, stopLevel, targetPrice2U,stratPattern2, riskReward2U,targetPrice2D, riskReward2D) =>
+//     string txt = ""
+//     txt += "stratPattern1: " + str.tostring(stratPattern1) + "\n"
+//     txt += "stopLevel: " + str.tostring(stopLevel) + "\n"
+//     txt += "targetPrice2U: " + str.tostring(targetPrice2U) + "\n"
+//     txt += "riskReward2U: " + str.tostring(riskReward2U) + "\n\n"
+//     txt += "stratPattern2: " + str.tostring(stratPattern2) + "\n"
+//     txt += "targetPrice2D: " + str.tostring(targetPrice2D) + "\n"
+//     txt += "riskReward2D: " + str.tostring(riskReward2D) + "\n"
+
+// //2D-1-2U Reversal [Target 2D High]
+// //2U-1-2D Reversal [Target 2U Low]
+// //3-1-2U Reversal [Target 3 High]
+// //3-1-2D Reversal [Target 3 Low]
+
+// //1-2D-2U Bullish RevStrat Reversal [Target pre-1 High]
+// //3-2D-2U - Bullish Reversal [Target 3 High]
+// //2D-2U - Bullish Reversal [Target pre 2D High]
+// //2U-2D - Bearish Reversal [Target pre 2U Low]
+// //1-2U-2D - Bearish Revstrat Reversal [Target pre-1 Low]
+// //3-2U-2D Bearish Reversal [Target 3 Low]
+
+// //##################################################################################################
+// //FTFC
+// //##################################################################################################
+// // do not show timeframes that are less than the time frame selected (it will be inaccurate)
+
+// //strategy.entry("long", strategy.long)
+// //strategy.close("long", when=bearish_cross)
+
+// //2D-1-2U Reversal [Target 2D High]
+// if isTwoDownCandle(1) and isInsideCandle(0)
+
+//     stopLevel = candlePrice(0)
+//     targetLevel = math.abs(high[1] - high[0])
+//     riskRewardRatio = math.round(math.abs(targetLevel/stopLevel),2)
+//     riskReward = str.tostring(riskRewardRatio) + "R"
+
+//     if(riskRewardRatio > 2)
+//         label.new(bar_index, na, stateText("2D-1-2U", stopLevel,targetLevel,riskReward), yloc = yloc.abovebar, color = bullishColor)
+
+// //2U-1-2D Reversal [Target 2U Low]
+// //else if isTwoUpCandle(2) and isInsideCandle(1) and isTwoDownCandle(0)
+// else if isTwoUpCandle(1) and isInsideCandle(0)
+
+//     stopLevel = candlePrice(0)
+//     targetLevel = math.abs(low[1] - low[0])
+//     riskRewardRatio = math.round(math.abs(targetLevel/stopLevel),2)
+//     riskReward = str.tostring(math.round(riskRewardRatio)) + "R"
+
+//     if(riskRewardRatio > 2)
+//         label.new(bar_index, na, stateText("2U-1-2D", stopLevel,targetLevel,riskReward), yloc = yloc.abovebar, color = bearishColor)
+
+
+// //3-1-2U Reversal [Target 3 High]
+// //3-1-2D Reversal [Target 3 Low]
+// //else if isOutsideCandle(2) and isInsideCandle(1) and isTwoUpCandle(0)
+// //else if isOutsideCandle(2) and isInsideCandle(1) and isTwoDownCandle(0)
+// else if isOutsideCandle(1) and isInsideCandle(0)
+
+//     stopLevel = candlePrice(0)
+//     targetLevel2U = math.abs(high[1] - high[0])
+//     riskReward2U = str.tostring(math.round(math.abs(targetLevel2U/stopLevel),2)) + "R"
+
+//     targetLevel2D = math.abs(low[1] - low[0])
+//     riskReward2D = str.tostring(math.round(math.abs(targetLevel2D/stopLevel),2)) + "R"
+
+
+//     //label.new(bar_index, na, stateText3("3-1-2U", stopLevel,targetLevel2U,riskReward2U,"3-1-2D",targetLevel2D,riskReward2D), yloc = yloc.abovebar, color = bullishColor)
+
+// //1-2D-2U Bullish RevStrat Reversal [Target pre-1 High]
+// //else if isInsideCandle(2) and isTwoDownCandle(1) and isTwoUpCandle(0)
+// else if isInsideCandle(1) and isTwoDownCandle(0)
+
+//     stopLevel = candlePrice(0)
+//     targetLevel = math.abs(high[2] - high[1])
+//     riskReward = str.tostring(math.round(math.abs(targetLevel/stopLevel),2)) + "R"
+
+//     //label.new(bar_index, na, stateText("1-2D-2U", stopLevel,targetLevel,riskReward), yloc = yloc.abovebar, color = bullishColor)
+
+// //1-2U-2D - Bearish Revstrat Reversal [Target pre-1 Low]
+// //else if isInsideCandle(2) and isTwoUpCandle(1) and isTwoDownCandle(0)
+// else if isInsideCandle(1) and isTwoUpCandle(0)
+
+//     stopLevel = candlePrice(0)
+//     targetLevel = math.abs(low[2] - low[1])
+//     riskReward = str.tostring(math.round(math.abs(targetLevel/stopLevel),2)) + "R"
+
+//     //label.new(bar_index, na, stateText("1-2U-2D", stopLevel,targetLevel,riskReward), yloc = yloc.abovebar, color = bearishColor)
+
+// //3-2U-2D Bearish Reversal [Target 3 Low]
+// //else if isOutsideCandle(2) and isTwoUpCandle(1) and isTwoDownCandle(0)
+// else if isOutsideCandle(1) and isTwoUpCandle(0)
+
+//     stopLevel = candlePrice(0)
+//     targetLevel = math.abs(low[1] - low[0])
+//     riskReward = str.tostring(math.round(math.abs(targetLevel/stopLevel),2)) + "R"
+
+//     //label.new(bar_index, na, stateText("3-2U-2D", stopLevel,targetLevel,riskReward), yloc = yloc.abovebar, color = bearishColor)
+
+// //3-2D-2U - Bullish Reversal [Target 3 High]
+// //else if isOutsideCandle(2) and isTwoDownCandle(1) and isTwoUpCandle(0)
+// else if isOutsideCandle(1) and isTwoDownCandle(0)
+
+//     stopLevel = candlePrice(0)
+//     targetLevel = math.abs(high[1] - high[0])
+//     riskReward = str.tostring(math.round(math.abs(targetLevel/stopLevel),2)) + "R"
+
+//     //label.new(bar_index, na, stateText("3-2D-2U", stopLevel,targetLevel,riskReward), yloc = yloc.abovebar, color = bullishColor)
+
+// //2D-2U - Bullish Reversal [Target pre 2D High]
+// //else if not isOutsideCandle(2) and not isInsideCandle(2) and isTwoDownCandle(1) and isTwoUpCandle(0)
+// else if not isOutsideCandle(1) and not isInsideCandle(1) and isTwoDownCandle(0)
+//     stopLevel = candlePrice(0)
+//     targetLevel = math.abs(high[1] - high[0])
+//     riskReward = str.tostring(math.round(math.abs(targetLevel/stopLevel),2)) + "R"
+
+//     //label.new(bar_index, na, stateText("2D-2U", stopLevel,targetLevel,riskReward), yloc = yloc.abovebar, color = bullishColor)
+
+// //2U-2D - Bearish Reversal [Target pre 2U Low]
+// //else if not isOutsideCandle(2) and not isInsideCandle(2) and isTwoUpCandle(1) and isTwoDownCandle(0)
+// else if not isOutsideCandle(1) and not isInsideCandle(1) and isTwoUpCandle(0)
+//     stopLevel = candlePrice(0)
+//     targetLevel = math.abs(low[1] - low[0])
+//     riskReward = str.tostring(math.round(math.abs(targetLevel/stopLevel),2)) + "R"
+
+//     //label.new(bar_index, na, stateText("2U-2D", stopLevel,targetLevel,riskReward), yloc = yloc.abovebar, color = bearishColor)

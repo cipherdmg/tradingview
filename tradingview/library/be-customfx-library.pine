@@ -1,0 +1,1381 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradeWiseWithEase
+//@version=5
+
+// @description A handful collection of regular functions, Custom Tools & Utility Functions could be used in regular Scripts. hope these functions can be understood by a non programmer like me too.
+library("BE_CustomFx_Library",overlay=true)
+
+
+TimeReduction(ForWhichTime) =>
+    DayMinus1                   = 24 * 60 * 60 * 1000
+    DayMinus3                   = 3 * 24 * 60 * 60 * 1000
+    DayMinus1W                  = 7 * 24 * 60 * 60 * 1000
+    WhichDayisTime              = dayofweek(ForWhichTime)
+    TimeMinusforWeekStart       = switch WhichDayisTime
+        1   => DayMinus1
+        2   => DayMinus1 * 1
+        3   => DayMinus1 * 2
+        4   => DayMinus1 * 3
+        5   => DayMinus1 * 4
+        6   => DayMinus1 * 5
+        7   => DayMinus1 * 6
+        =>     DayMinus1
+    MonthStartDate              = ForWhichTime - timestamp(syminfo.timezone, year(ForWhichTime - 6000), month(ForWhichTime - 6000), 01, 00, 00, 00)
+    NextMonthStartDate          = ForWhichTime - timestamp(syminfo.timezone, month(ForWhichTime - 6000) + 1 == 13 ? year(ForWhichTime - 6000) + 1 : year(ForWhichTime - 6000), month(ForWhichTime - 6000) + 1 == 13 ? 01 : month(ForWhichTime - 6000) + 1 , 01, 00, 00, 00)
+    _3MonthStartDate            = ForWhichTime - timestamp(syminfo.timezone, month(ForWhichTime - 6000) - 2 <= 0 ? year(ForWhichTime - 6000) - 1 : year(ForWhichTime - 6000), month(ForWhichTime - 6000) - 2 == 0 ? 12 : month(ForWhichTime - 6000) - 2 == -1 ? 11 : month(ForWhichTime - 6000) - 2 , 01, 00, 00, 00)
+    [DayMinus1, DayMinus3, DayMinus1W, TimeMinusforWeekStart, MonthStartDate, NextMonthStartDate, _3MonthStartDate]
+
+// @function to compare the value against and provide the boolean output
+// @param flot val2chk = Number to check
+// @param string OperatorTxt = Set to E for ==, NE for !=, G for >, GE for >=, L for <, LE for <= , BE for <= and >= (Between with Equal) and ather string for >< (Between with greater Lesser)
+// @param float CompareVal1 = single input to compare against Val2Chk
+// @param float CompareVal2 = incase of between scenarios thsi will be used
+// @returns Returns bool Output if compared value found to be true
+export OperatorChk(float val2chk,string OperatorTxt, float CompareVal1,float CompareVal2 = 0) =>
+    bool isAboveWithE           = val2chk >= CompareVal1    ? true : false
+    bool isBelowWithE           = val2chk <= CompareVal2    ? true : false
+    bool isAboveWithOutE        = val2chk > CompareVal1     ? true : false
+    bool isBelowWithOutE        = val2chk < CompareVal2     ? true : false
+    a = switch OperatorTxt
+        "E" =>  val2chk == CompareVal1              ? true : false
+        "NE" => val2chk != CompareVal1              ? true : false
+        "G" =>  val2chk > CompareVal1               ? true : false
+        "GE" => val2chk >= CompareVal1              ? true : false
+        "L" =>  val2chk < CompareVal1               ? true : false
+        "LE" => val2chk <= CompareVal1              ? true : false
+        "B" =>  isAboveWithOutE and isBelowWithOutE ? true : false
+        "BE" => isAboveWithE and isBelowWithE       ? true : false
+        => false
+
+
+// Supporting tuple function to calculate the candle co-ordinates.
+CustomCandleInfoFx(Repainting, Gaps) =>
+    bool Rpnt               = barstate.ishistory or barstate.isconfirmed
+    float C_Open            = na
+    float C_Close           = na
+    float C_High            = na
+    float C_Low             = na
+    float R_Open            = Rpnt ? open[0]    : nz(open[1])
+    float R_Close           = Rpnt ? close[0]   : nz(close[1])
+    float R_High            = Rpnt ? high[0]    : nz(high[1])
+    float R_Low             = Rpnt ? low[0]     : nz(low[1])
+    if barstate.isfirst and Gaps == false
+        C_Open  := open
+        C_Close := close
+        C_High  := high
+        C_Low   := low
+    else if Repainting and Gaps == false
+        C_Open  := open
+        C_Close := close
+        C_High  := high
+        C_Low   := low
+    else if Repainting == false and Gaps == false
+        C_Open  := nz(open[1])
+        C_Close := nz(close[1])
+        C_High  := nz(high[1])
+        C_Low   := nz(low[1])
+    else if Repainting and Gaps
+        C_Open  := open[0] > high[1] or open[0] < low[1] ? close[1] : open[0]
+        C_Close := close
+        C_High  := math.max(high,C_Open)
+        C_Low   := math.min(low,C_Open)
+    else
+        C_Open  := R_Open > R_High[1] or R_Open < R_Low[1] ? R_Close[1] : R_Open
+        C_Close := R_Close
+        C_High  := math.max(R_High,C_Open)
+        C_Low   := math.min(R_Low,C_Open)
+
+    [C_Open, C_Close, C_High, C_Low]
+
+// [Opn,cls,hgh,lw] = CustomCandleInfoFx(false,true)
+// plotcandle(
+//      Opn -400,
+//      hgh -400,
+//      lw -400,
+//      cls -400,
+//      "customOHLC",
+//      color = Opn > cls ? color.red : color.green,
+//      wickcolor = color.white,
+//      bordercolor =  Opn > cls ? color.red : color.green,
+//      show_last = 120)
+
+// @function Function to return the String Value of Number with decimal precision with the prefix and suffix characters provided
+// @param float ValueToConvert = Number to Convert
+// @param int RequiredDecimalPlaces = No of Decimal values Required. supports to a max of 5 decimals else defaults to 2
+// @param string BeginingChar = Prefix character which is needed.
+// @param string EndChar = Suffix character which is needed.
+// @returns Returns Out put with formated value of Given Number for the specified deicimal values with Prefix and suffix string
+export G_TextValOfNumber(
+     float ValueToConvert = 0.0000,
+     simple int RequiredDecimalPlaces = 2,
+     simple string EndChar = "",
+     simple string BeginingChar = "" ) =>
+
+    string FormatedVal = switch RequiredDecimalPlaces
+        0 =>    str.format("{0,number,integer}",ValueToConvert)
+        1 =>    str.format("{0,number,#.#}",ValueToConvert)
+        3 =>    str.format("{0,number,#.###}",ValueToConvert)
+        4 =>    str.format("{0,number,#.####}",ValueToConvert)
+        5 =>    str.format("{0,number,#.####}",ValueToConvert)
+        =>      str.format("{0,number,#.##}",ValueToConvert)
+
+    string Output = BeginingChar + FormatedVal + EndChar
+
+// @function Function to return the Tradable Value of Number
+// @param float ValueToConvert = Number to Convert
+// @param int NeedCustomization = set to 1 if you want to customize the decimal percision values. default is No customization needed, which provides output equalent to round_to_mintick
+// @param int RequiredDecimalPlaces = if NeedCustomization is set to 1 mention the decimal percision value required. max supported decimal is 5 else defaults to 2
+// @returns Returns Out put with formated value of Given Number
+export G_TradableValue(
+     float ValueToConvert = 0.0000,
+     simple int NeedCustomization = 2,
+     simple int RequiredDecimalPlaces = 2) =>
+
+    if NeedCustomization == 2
+        Output = math.round_to_mintick(ValueToConvert)
+    else
+        string FormatedVal = switch RequiredDecimalPlaces
+            0 => str.format("{0,number,integer}",ValueToConvert)
+            1 => str.format("{0,number,#.#}",ValueToConvert)
+            3 => str.format("{0,number,#.###}",ValueToConvert)
+            4 => str.format("{0,number,#.####}",ValueToConvert)
+            5 => str.format("{0,number,#.####}",ValueToConvert)
+            =>   str.format("{0,number,#.##}",ValueToConvert)
+
+        float Output = str.tonumber(FormatedVal)
+
+x = input.string("Normal","Text Size to Select",["Auto", "Tiny", "Small", "Normal", "Large", "Huge"])
+// @function Function to Get size Value for text values used in Lables
+// @param string SizeValue = auto, tiny, small, normal, large, huge. specify either of these values or default value Normal will be displayed as output
+// @returns Returns Respective Text size
+export G_TxtSizeForLables(simple string SizeValue = "Normal") =>
+    string Output = switch SizeValue
+        "Auto"  =>  size.auto
+        "Tiny"  =>  size.tiny
+        "Small" =>  size.small
+        "Large" =>  size.large
+        "Huge"  =>  size.huge
+        =>          size.normal
+
+y = input.string(title='Line Style', options=['solid (─)', 'dotted (┈)', 'dashed (╌)', 'arrow left (←)', 'arrow right (→)', 'arrows both (↔)'], defval='dotted (┈)')
+// @function Function to Get Line Style Value for text values used in Lines
+// @param string LineType = 'solid (─)', 'dotted (┈)', 'dashed (╌)', 'arrow left (←)', 'arrow right (→)', 'arrows both (↔)' or default line style 'dotted (┈)' will be the output
+// @returns Returns Respective Line style
+export G_Reg_LineType(simple string LineType = "dotted (┈)") =>
+    string Output = switch LineType
+        "solid (─)"         =>  line.style_solid
+        "dashed (╌)"        =>  line.style_dashed
+        "arrow left (←)"    =>  line.style_arrow_left
+        "arrow right (→)"   =>  line.style_arrow_right
+        "arrows both (↔)"   =>  line.style_arrow_both
+        =>                      line.style_dotted
+
+z = input.string(title='Shape Style', options=['Triangle Up', 'Triangle Down', 'Arrow Up', 'Arrow Down','Lable Up', 'Lable Down','Flag', 'Circle','Square','Dimond'], defval='Triangle Up')
+//shape.triangleup, shape.triangledown, shape.flag, shape.circle, shape.arrowup, shape.arrowdown, shape.labelup, shape.labeldown,
+// @function Function to Get Shape Style Value for text values used in plot shapes
+// @param string ShapeType = 'XCross', 'Cross', 'Triangle Up', 'Triangle Down', 'Flag', 'Circle','Arrow Up', 'Arrow Down','Lable Up', 'Lable Down' or default shpae style Triangle Up will be the output
+// @returns Returns Respective Shape style
+export G_ShapeTypeForLables(simple string ShapeType = 'Triangle Up') =>
+    string Output = switch ShapeType
+        'Triangle Down'     =>  shape.triangledown
+        'Arrow Up'          =>  shape.arrowup
+        'Arrow Down'        =>  shape.arrowdown
+        'Lable Up'          =>  shape.labelup
+        'Lable Down'        =>  shape.labeldown
+        'Flag'              =>  shape.flag
+        'Circle'            =>  shape.circle
+        'Square'            =>  shape.square
+        'Dimond'            =>  shape.diamond
+        =>                      shape.triangleup
+
+TPosn = input.string( title = "Table Position", defval = "LeftCenter", options = ["TopLeft", "BottomLeft", "LeftCenter", "RightCenter", "TopRight", "BottomRight","TopCenter","BottomCenter"])
+export G_TablePositon(simple string TablePosition) =>
+    switch TablePosition
+        "TopLeft"       => position.top_left
+        "BottomLeft"    => position.bottom_left
+        "LeftCenter"    => position.middle_left
+        "RightCenter"   => position.middle_right
+        "TopRight"      => position.top_right
+        "TopCenter"     => position.top_center
+        "BottomCenter"  => position.bottom_center
+        => position.bottom_right
+
+// @function Gets Output of the technical analyis indicator which has length Parameter. RSI, ATR, EMA, SMA, HMA, WMA, VWMA, 'CMO', 'MOM', 'ROC','VWAP', "Highest", "Lowest"
+// @param string IndicatorName to be specified
+// @param float SrcVal for the TA indicator default is close
+// @param simple int Length for the TA indicator
+// @param int DecimalValue optional to specify if required formatted output with decimal percision else default output comes in tradable value
+// @returns Value with the given parameters
+export G_Indicator_Val(string IndicatorName, simple int Length, float SrcVal = close, simple int DecimalValue = 0) =>
+    float IndValue = switch IndicatorName
+        "ROC" =>    ta.roc(SrcVal, Length)
+        "MOM" =>    ta.mom(SrcVal, Length)
+        "CMO" =>    ta.cmo(SrcVal, Length)
+        "RSI" =>    ta.rsi(SrcVal, Length)
+        "ATR" =>    ta.atr(Length) // to Mention Simple Int
+        "EMA" =>    ta.ema(SrcVal, Length)
+        "SMA" =>    ta.sma(SrcVal, Length)
+        "HMA" =>    ta.hma(SrcVal, Length)
+        "WMA" =>    ta.wma(SrcVal, Length)
+        "VWMA" =>   ta.vwma(SrcVal, Length)
+        "VWAP" =>   ta.vwap
+        "Highest" =>ta.highest(SrcVal == close ? high : SrcVal, Length)
+        "Lowest" => ta.lowest(SrcVal == close ? low : SrcVal, Length)
+
+    Output = G_TradableValue(IndValue, DecimalValue == 0 ? 2 : 1,  DecimalValue)
+
+// @function function to get Candle Informarion such as both wicksize, top wick size , bottom wick size, full candle size and body size in default points
+// @param string WhatCandleInfo,  string input with either of these options  "Wick" , "TWick" , "BWick" , "Candle", "Body" , "BearfbVal", "BullfbVal" , "CandleOpen" ,"CandleClose", "CandleHigh" , "CandleLow", "BodyPct","ExtractVal"
+// @param bool RepaintingVersion,  set to true if required data on the realtime bar else default is set to false
+// @param float FibValueOfCandle,  set the fibo value to extract fibvalue of the candle else default is set to 38.2%
+// @param bool AccountforGaps,  set to true if required data on considering the gap between previous and current bar else default is set to false
+// @param float MidVal, set the % value in order to extract the value for the candle
+// @returns Returns Respective values for the candles
+export G_CandleInfo(simple string WhatCandleInfo, simple float FibValueOfCandle = 0.382, bool RepaintingVersion = false, bool AccountforGaps = false, float MidVal = 0.5) =>
+    var float fbv = 0.00
+    var int cndltype = 0
+    fbv := FibValueOfCandle == 0 ? 0.382 : FibValueOfCandle
+
+    [Opn, Cls, Hgh, Lw]         = CustomCandleInfoFx(RepaintingVersion,AccountforGaps)
+    cndltype                    := Opn > Cls ? -1 : 1
+    float Output = switch WhatCandleInfo
+        "Wick"          => cndltype == -1 ? (Hgh - Opn) + (Cls - Lw)   : (Hgh - Cls) + (Opn - Lw)
+        "TWick"         => cndltype == -1 ? (Hgh - Opn)                : (Hgh - Cls)
+        "BWick"         => cndltype == -1 ? (Cls - Lw)                 : (Opn - Lw)
+        "Candle"        => math.abs(Hgh - Lw)
+        "Body"          => math.abs(Opn - Cls)
+        "BearfbVal"     => (Hgh - Lw) * fbv
+        "BullfbVal"     => (Lw - Hgh) * fbv
+        "CandleOpen"    => Opn
+        "ExtractVal"    => Lw + ((Hgh - Lw) * MidVal)
+        "CandleLow"     => Lw
+        "CandleHigh"    => Hgh
+        "CandleClose"   => Cls
+        "BodyPct"       => math.abs(Opn - Cls) / math.abs(Hgh - Lw)
+        "MCPct"         => math.abs(Opn - Cls) / Cls * 100
+
+// @function To Check if the candle is a powered Push or Not
+export IsPoweredPushBuy(int LookBackBars, bool RepaintingVersion = true) =>
+    MCPct               = G_CandleInfo("MCPct",0,RepaintingVersion)
+    HasMoreBodyH        = ta.sma(MCPct, LookBackBars) * 2.5
+    candlesize          = G_CandleInfo("Candle",0,RepaintingVersion)
+    wicksize            = G_CandleInfo("Wick",0,RepaintingVersion)
+    [Opn, Cls, Hgh, Lw] = CustomCandleInfoFx(RepaintingVersion,false)
+    bool Output         = false
+    if Opn < Cls and MCPct > HasMoreBodyH and ((Opn==Lw and Cls==Hgh) or ((Cls >= (Hgh - (candlesize * 0.05))) and (wicksize < math.abs(Opn - Cls))) or (Cls==Hgh and (wicksize < math.abs(Opn - Cls))))
+        Output          := true
+
+
+// @function To Check if the candle is a powered Push or Not
+export IsPoweredPushSell(int LookBackBars, bool RepaintingVersion = true) =>
+    MCPct               = G_CandleInfo("MCPct",0,RepaintingVersion)
+    HasMoreBodyH        = ta.sma(MCPct, LookBackBars) * 2.5
+    candlesize          = G_CandleInfo("Candle",0,RepaintingVersion)
+    wicksize            = G_CandleInfo("Wick",0,RepaintingVersion)
+    [Opn, Cls, Hgh, Lw] = CustomCandleInfoFx(RepaintingVersion,false)
+    bool Output         = false
+    if Opn > Cls and MCPct > HasMoreBodyH and ((Opn==Lw and Cls==Hgh) or ((Cls <= (Lw + (candlesize * 0.05))) and (wicksize < math.abs(Opn - Cls))) or (Cls==Lw and (wicksize < math.abs(Opn - Cls))))
+        Output          := true
+
+
+// @function Gets Delta Output of the technical analyis indicator
+// @param int ShortLength to be specified default is 3
+// @param int LongLength to be specified default is 8
+// @param simple string MAType for the TA indicator supported are  EMA, SMA, HMA
+// @param bool RepaintingVersion calculate on realtime bar? default is true.
+// @returns Value with the given parameters
+export G_Delta(simple int ShortLength = 3,simple int LongLength = 8,simple string MAType = "EMA", bool RepaintingVersion = true)=>
+    if MAType == "EMA" or MAType == "SMA" or MAType == "HMA"
+        SlowEMA     = G_Indicator_Val(MAType,LongLength, G_CandleInfo("CandleClose",0,RepaintingVersion))
+        FastEMA     = G_Indicator_Val(MAType,ShortLength, G_CandleInfo("CandleClose",0,RepaintingVersion))
+        StTermDelta = ((FastEMA - SlowEMA) / hlc3 ) * 100
+
+// @function Counts how many green & red bars have printed recently (ie. pullback count)
+// @param int HowManyCandlesToCheck The lookback period to look back over
+// @param int BullBear The color of the bar to count (1 = Bull, -1 = Bear), Open = close candles are ignored
+// @param float AboveOrBelow if in case you would need to count only green candles wich are close above 50% of previous candle then use 0.5
+// @returns The bar count of how many candles have retraced over the given lookback with specific candles
+export G_BullBearBarCount(int HowManyCandlesToCheck, int BullBear = 1, float AboveOrBelow = 0) =>
+    CandlesCounter  = 0
+    TestTheValue    = G_CandleInfo("ExtractVal",0,false,false,AboveOrBelow)
+    for i = 1 to HowManyCandlesToCheck by 1
+        if BullBear == 1 and close[i] > open[i] and close[i] >= TestTheValue // Count green bars
+            CandlesCounter := CandlesCounter + 1
+        if BullBear == -1 and close[i] < open[i] and close[i] <= TestTheValue  // Count red bars
+            CandlesCounter := CandlesCounter + 1
+    CandlesCounter
+
+// @function function to get candle co-ordinate in order to use it further for calculating your analysis work . "Heart full Thanks to 3 Pine motivators (LonesomeTheBlue, Myank & Sriki) who helped me cracking this logic"
+// @param Int SelectedCandleNumber (default=450) How many candles you would need to anlysie in your script from the right.
+// @returns A boolean - output is returned to say the starting point and continue to diplay true for the future candles
+export BarToStartYourCalculation(int SelectedCandleNumber = 450) =>
+    UTC = 0.
+    // get UTC time
+    int timenow_    = timenow + math.round(UTC * 3600000)
+    int time_       = time + math.round(UTC * 3600000)
+
+    // calculate D/H/M/S for the bar which we are on and time now
+    int daynow_     = math.floor((timenow_ + 86400000 * 3) / 86400000) % 7
+    int day_        = math.floor((time_ + 86400000 * 3) / 86400000) % 7
+    int hournow_    = math.floor(timenow_ / 3600000) % 24
+    int hour_       = math.floor(time_ / 3600000) % 24
+    int minutenow_  = math.floor(timenow_ / 60000) % 60
+    int minute_     = math.floor(time_ / 60000) % 60
+    int secondnow_  = math.floor(timenow_ / 60000) % 60
+    int second_     = math.floor(time_ / 60000) % 60
+    int hmstime_    = hour_ * 3600000 + minute_ * 60000 + second_ * 1000
+    int hmstimenow_ = hournow_ * 3600000 + minutenow_ * 60000 + secondnow_ * 1000
+
+    var int starttime = na
+    if bar_index > SelectedCandleNumber and (na(starttime) or time_ < nz(starttime))
+        if timeframe.isdaily
+            if day_ == daynow_  // session day
+                diff            = time_ - time_[SelectedCandleNumber]
+                starttime       := timenow_ - diff
+            if daynow_ > day_ and daynow_ > day_[1] and day_[1] > day_  // weekend
+                diff            = time_[1] - time_[SelectedCandleNumber + 1] + (daynow_ - day_[1]) * 86400000
+                starttime       := timenow_ - diff
+        if timeframe.isintraday
+            if day_ == daynow_ and day_[1] == daynow_ and hmstime_ > hmstimenow_ and hmstime_[1] <= hmstimenow_  // in session
+                diff            = time_[1] - time_[SelectedCandleNumber + 1] + math.round(UTC * 3600000)
+                starttime       := timenow_ - diff
+            if day_ != daynow_ and day_[1] == daynow_ and hmstime_ < hmstimenow_ and hmstime_[1] <= hmstimenow_  // in same day and after session
+                diff            = time_[1] - time_[SelectedCandleNumber + 1] + hmstimenow_ - hmstime_[1] + math.round(UTC * 3600000)
+                starttime       := timenow_ - diff
+            if day_ == daynow_ and day_[1] + 1 == daynow_ and hmstime_ > hmstimenow_ and hmstime_[1] >= hmstimenow_  // in week (not first day) and before session
+                diff            = time_[1] - time_[SelectedCandleNumber + 1] + 24 * 3600000 - hmstime_[1] + hmstimenow_ + math.round(UTC * 3600000)
+                starttime       := timenow_ - diff
+            if day_ == daynow_ and day_[1] > daynow_ and hmstime_ > hmstimenow_ and hmstime_[1] >= hmstimenow_  // the day after weekend before session
+                diff            = time_[1] - time_[SelectedCandleNumber + 1] + 2 * 86400000 + 24 * 3600000 - hmstime_[1] + hmstimenow_ + math.round(UTC * 3600000)
+                starttime       := timenow_ - diff
+            if daynow_ > day_ and daynow_ > day_[1] and day_[1] > day_  // weekend
+                diff            = time_[1] - time_[SelectedCandleNumber + 1] + (daynow_ - day_[1] - 1) * 86400000 + 24 * 3600000 - hmstime_[1] + hmstimenow_ + math.round(UTC * 3600000)
+                starttime       := timenow_ - diff
+        if timeframe.isweekly
+            starttime           := timenow_ - timeframe.multiplier * SelectedCandleNumber * 604800000  // 1 week = 604800000ms
+        if timeframe.ismonthly
+            starttime           := timenow_ - timeframe.multiplier * SelectedCandleNumber * 2629743000  // 1 month = 2629743000ms
+
+    GetBoolOutput               = not na(starttime) and time >= starttime
+
+// @function Checks if the current bar is a hammer candle based on the given parameters
+// @param float fib (default=0.382) The fib to base candle body on
+// @param bool colorMatch (default=false) Does the candle need to be green? (true/false)
+// @param bool NeedRepainting (default=false) Specify True if you need them to calculate on the realtime bars
+// @returns A boolean - true if the current bar matches the requirements of a hammer candle
+export isHammer(float fib = 0.382, bool colorMatch = false, bool NeedRepainting = false) =>
+    o           = G_CandleInfo("CandleOpen",0,NeedRepainting)
+    h           = G_CandleInfo("CandleHigh",0,NeedRepainting)
+    l           = G_CandleInfo("CandleLow",0,NeedRepainting)
+    c           = G_CandleInfo("CandleClose",0,NeedRepainting)
+    bullFib     = (l - h) * fib + h
+    lowestBody  = c < o ? c : o
+    lowestBody >= bullFib and (not colorMatch or c > o)
+
+// @function Checks if the current bar is a shooting star candle based on the given parameters
+// @param float fib (default=0.382) The fib to base candle body on
+// @param bool colorMatch (default=false) Does the candle need to be red? (true/false)
+// @param bool NeedRepainting (default=false) Specify True if you need them to calculate on the realtime bars
+// @returns A boolean - true if the current bar matches the requirements of a shooting star candle
+export isStar(float fib = 0.382, bool colorMatch = false, bool NeedRepainting = false) =>
+    o           = G_CandleInfo("CandleOpen",0,NeedRepainting)
+    h           = G_CandleInfo("CandleHigh",0,NeedRepainting)
+    l           = G_CandleInfo("CandleLow",0,NeedRepainting)
+    c           = G_CandleInfo("CandleClose",0,NeedRepainting)
+    bearFib     = (h - l) * fib + l
+    highestBody = c > o ? c : o
+    highestBody <= bearFib and (not colorMatch or c < o)
+
+// @function Checks if the current bar is a doji candle based on the given parameters
+// @param float wickSize (default=1.5 times) The maximum allowed times can be top wick size compared to the bottom (and vice versa)
+// @param float bodySize (default= 5 percent to be mentioned as 0.05) The maximum body size as a percentage compared to the entire candle size
+// @param bool NeedRepainting (default=false) Specify true if you need them to calculate on the realtime bars
+// @returns A boolean - true if the current bar matches the requirements of a doji candle
+export isDoji(float wickSize = 1.5, float bodySize = 0.05, bool NeedRepainting = false) =>
+    G_CandleInfo("TWick",0,NeedRepainting) <= G_CandleInfo("BWick",0,NeedRepainting) * wickSize and
+     G_CandleInfo("BWick",0,NeedRepainting) <= G_CandleInfo("TWick",0,NeedRepainting) * wickSize and
+     G_CandleInfo("BodyPct",0,NeedRepainting) <= bodySize
+
+// @function Checks if the current bar is a bullish engulfing candle
+// @param float allowance (default=0) How many POINTS to allow the open to be off by (useful for markets with micro gaps)
+// @param float rejectionWickSize (default=disabled) The maximum rejection wick size compared to the body as a percentage
+// @param bool engulfWick (default=false) Does the engulfing candle require the wick to be engulfed as well?
+// @param bool NeedRepainting (default=false) Specify True if you need them to calculate on the realtime bars
+// @returns A boolean - true if the current bar matches the requirements of a bullish engulfing candle
+export isBullishEC(float allowance = 0.0, float rejectionWickSize = 0.0, bool engulfWick = false, bool NeedRepainting = false) =>
+    o           = G_CandleInfo("CandleOpen",0,NeedRepainting)
+    h           = G_CandleInfo("CandleHigh",0,NeedRepainting)
+    l           = G_CandleInfo("CandleLow",0,NeedRepainting)
+    c           = G_CandleInfo("CandleClose",0,NeedRepainting)
+    (c[1] <= o[1] and
+     c >= o[1] and
+     o <= c[1] + allowance) and
+     (not engulfWick or c >= h[1]) and
+     (rejectionWickSize == 0.0 or G_CandleInfo("TWick",0,NeedRepainting) / G_CandleInfo("Body",0,NeedRepainting) < rejectionWickSize)
+
+// @function Checks if the current bar is a bearish engulfing candle
+// @param float allowance (default=0) How many POINTS to allow the open to be off by (useful for markets with micro gaps)
+// @param float rejectionWickSize (default=disabled) The maximum rejection wick size compared to the body as a percentage
+// @param bool engulfWick (default=false) Does the engulfing candle require the wick to be engulfed as well?
+// @param bool NeedRepainting (default=false) Specify True if you need them to calculate on the realtime bars
+// @returns A boolean - true if the current bar matches the requirements of a bearish engulfing candle
+export isBearishEC(float allowance = 0.0, float rejectionWickSize = 0.0, bool engulfWick = false, bool NeedRepainting = false) =>
+    o           = G_CandleInfo("CandleOpen",0,NeedRepainting)
+    h           = G_CandleInfo("CandleHigh",0,NeedRepainting)
+    l           = G_CandleInfo("CandleLow",0,NeedRepainting)
+    c           = G_CandleInfo("CandleClose",0,NeedRepainting)
+    (c[1] >= o[1] and
+     c <= o[1] and
+     o >= c[1] - allowance) and
+     (not engulfWick or c <= l[1]) and
+     (rejectionWickSize == 0.0 or G_CandleInfo("BWick",0,NeedRepainting) / G_CandleInfo("Body",0,NeedRepainting) < rejectionWickSize)
+
+// @function helps you to plot the Trendlines based on the specified angle at the defined price to bar ratio
+// @param float Degree (default=14) angle at which Trendline to be plot
+// @param float price2bar_ratio (default=1e-10) The maximum rejection wick size compared to the body as a percentage
+// @param int Bars2Plot (default=6) Does the engulfing candle require the wick to be engulfed as well?
+// @param string LineStyle = 'solid (─)', 'dotted (┈)', 'dashed (╌)', 'arrow left (←)', 'arrow right (→)', 'arrows both (↔)' or default line style 'dotted (┈)' will be the output
+// @param bool PlotOnOpen_Close (default=false) Specify True if you need them to calculate on the Open\Close Values
+// @returns plot the Trendlines based on the specified angle at the defined price to bar ratio
+export Plot_TrendLineAtDegree(float Degree = 14.0, float price2bar_ratio = 1e-10, int Bars2Plot = 6,simple string LineStyle = "dotted (┈)", bool PlotOnOpen_Close = false) =>
+    float valMulti      = 1.739e-12
+    float TimeMulti     = 1e-10
+    float TimeDivider   = price2bar_ratio / TimeMulti
+    float Val_Multi     = TimeDivider * (Degree * valMulti)
+    wheretoPlot_Top     = PlotOnOpen_Close ? math.max(open, close) : high
+    wheretoPlot_Bottom  = PlotOnOpen_Close ? math.min(open, close) : low
+
+    var HighLines   = array.new_line(Bars2Plot)
+    var LowLines    = array.new_line(Bars2Plot)
+    for ab = 0 to (Bars2Plot - 1) by 1
+        line.delete(array.get(HighLines, ab))
+        line.delete(array.get(LowLines, ab))
+        float HVal2Plot = wheretoPlot_Top[ab] + Val_Multi
+        float LVal2Plot = wheretoPlot_Bottom[ab] - Val_Multi
+        array.set(HighLines, ab,
+                  line.new(x1   = bar_index[ab],
+                          y1    = wheretoPlot_Top[ab],
+                          x2    = bar_index[ab] + 1,
+                          y2    = HVal2Plot,
+                          color = color.green,
+                          extend= extend.right,
+                          style = G_Reg_LineType(LineStyle)))
+        array.set(LowLines, ab,
+                  line.new(x1   = bar_index[ab],
+                          y1    = wheretoPlot_Bottom[ab],
+                          x2    = bar_index[ab] + 1,
+                          y2    = LVal2Plot,
+                          color = color.lime,
+                          extend= extend.right,
+                          style = G_Reg_LineType(LineStyle)))
+
+// @function Gets the percentage change between 2 float values over a given lookback period
+// @param float value1 The first value to reference
+// @param float value2 The second value to reference
+// @param int lookback The lookback period to analyze
+export G_Pct_Chng(float value1, float value2, int lookback) =>
+    vChange = value1 - value2
+    vDiff   = vChange - vChange[lookback]
+    (vDiff / vChange) * 100
+
+// @function to calculate the ITM stike for the defined strike change
+// @param string source (default='c') specify either of the source value ['o','h','l','c','s'] Note: Be mindful as it may be repainted and calulation to be called on every bar
+// @param bool NeedRepainting (default=true) Specify false if you need them to calculate on the completed bars
+// @param int StrikeDiff (default=100) Specify the strike difference value.  eg = Nifty = 50 and BNF = 100
+// @param bool ForCE (default=true) Specify false if you need them to calculate for PE option
+// @param int HowDeep (default=1) Specify the level.
+// @param float SVal (default=0) Specify the source value.
+// @param float CalibaratePct (default=0, min = 0 and max = 1) Specify the percentage value. eg if calibarion is set for 50% on the banknifty close price with 30030.5 ITM CE 1 deep will show 29900 how ever if close price is 30070.5 ITM CE with 1 deep will show 30000
+// @returns the strike price for the options speficied
+export G_ITM(int HowDeep = 1, int StrikeDiff = 100, bool ForCE = true, string source = 'c', float SVal = 0, float CalibaratePct = 0.0, bool NeedRepainting = true) =>
+    Val = switch source
+        'o' => G_CandleInfo("CandleOpen",0,NeedRepainting)
+        'h' => G_CandleInfo("CandleHigh",0,NeedRepainting)
+        'l' => G_CandleInfo("CandleLow",0,NeedRepainting)
+        'c' => G_CandleInfo("CandleClose",0,NeedRepainting)
+        =>  SVal
+    PreOutput = ForCE ? Val - (Val % StrikeDiff) - (StrikeDiff * HowDeep) : Val - (Val % StrikeDiff) + (StrikeDiff * HowDeep)
+    if CalibaratePct == 0.0
+        PreOutput
+    else
+        if OperatorChk(CalibaratePct, "BE", 0.0 , 1.0)
+            Val % StrikeDiff >= StrikeDiff * CalibaratePct and ForCE ? PreOutput - StrikeDiff : Val % StrikeDiff <= StrikeDiff * (1 - CalibaratePct) and not ForCE ? PreOutput + StrikeDiff : PreOutput
+        else
+            PreOutput
+
+// @function to calculate the OTM stike for the defined strike change
+// @param string source (default='c') specify either of the source value ['o','h','l','c'] Note: Be mindful as it may be repainted and calulation to be called on every bar
+// @param bool NeedRepainting (default=true) Specify false if you need them to calculate on the completed bars
+// @param int StrikeDiff (default=100) Specify the strike difference value.  eg = Nifty = 50 and BNF = 100
+// @param bool ForCE (default=true) Specify false if you need them to calculate for PE option
+// @param int HowDeep (default=1) Specify the level.
+// @param float SVal (default=0) Specify the source value.
+// @param float CalibaratePct (default=0, min = 0 and max = 1) Specify the percentage value. eg if calibarion is set for 50% on the banknifty close price with 30030.5 ITM CE 1 deep will show 29900 how ever if close price is 30070.5 ITM CE with 1 deep will show 30000
+// @returns the strike price for the options speficied
+export G_OTM(int HowDeep = 1, int StrikeDiff = 100, bool ForCE = true, string source = 'c', float SVal = 0, float CalibaratePct = 0.0, bool NeedRepainting = true) =>
+    Val = switch source
+        'o' => G_CandleInfo("CandleOpen",0,NeedRepainting)
+        'h' => G_CandleInfo("CandleHigh",0,NeedRepainting)
+        'l' => G_CandleInfo("CandleLow",0,NeedRepainting)
+        'c' => G_CandleInfo("CandleClose",0,NeedRepainting)
+        =>  SVal
+    PreOutput = ForCE ? Val - (Val % StrikeDiff) + (StrikeDiff * HowDeep) : Val - (Val % StrikeDiff) - (StrikeDiff * HowDeep)
+    if CalibaratePct == 0.0
+        PreOutput
+    else
+        if OperatorChk(CalibaratePct, "BE", 0.0 , 1.0)
+            Val % StrikeDiff >= StrikeDiff * CalibaratePct and ForCE ? PreOutput + StrikeDiff : Val % StrikeDiff <= StrikeDiff * (1 - CalibaratePct) and not ForCE ? PreOutput - StrikeDiff : PreOutput
+        else
+            PreOutput
+
+
+// @function to calculate the ATM stike for the defined strike change
+// @param string source (default='c') specify either of the source value ['o','h','l','c'] Note: Be mindful as it may be repainted and calulation to be called on every bar
+// @param bool NeedRepainting (default=true) Specify false if you need them to calculate on the completed bars
+// @param int StrikeDiff (default=100) Specify the strike difference value.  eg = Nifty = 50 and BNF = 100
+// @param float SVal (default=0) Specify the source value.
+// @param float CalibaratePct (default=0, min = 0 and max = 1) Specify the percentage value. eg if calibarion is set for 50% on the banknifty close price with 30030.5 ITM CE 1 deep will show 29900 how ever if close price is 30070.5 ITM CE with 1 deep will show 30000
+// @returns the strike price for the options speficied
+export G_ATM(int StrikeDiff = 100, bool ForCE = true, string source = 'c', float SVal = 0, float CalibaratePct = 0.0, bool NeedRepainting = true) =>
+    Val = switch source
+        'o' => G_CandleInfo("CandleOpen",0,NeedRepainting)
+        'h' => G_CandleInfo("CandleHigh",0,NeedRepainting)
+        'l' => G_CandleInfo("CandleLow",0,NeedRepainting)
+        'c' => G_CandleInfo("CandleClose",0,NeedRepainting)
+        =>  SVal
+    PreOutput = Val - (Val % StrikeDiff)
+    if CalibaratePct == 0.00
+        PreOutput
+    else
+        if OperatorChk(CalibaratePct, "BE", 0.0 , 1.0)
+            Val % StrikeDiff >= StrikeDiff * CalibaratePct and ForCE ? PreOutput + StrikeDiff : Val % StrikeDiff <= StrikeDiff * (1 - CalibaratePct) and not ForCE ? PreOutput - StrikeDiff : PreOutput
+        else
+            PreOutput
+
+
+// @function Determines if the bar's time falls within time filter range
+// @param string SessionPeriod (default = "GMT+5:30")Opening Market peak time
+// @returns A boolean - true if the current bar falls within the given time
+export Chk_TradingTime(string SessionPeriod = '0930-1500') =>
+    not(na(time(timeframe.period, SessionPeriod + ':1234567')))
+
+// @function to retrieve the highest frequency value for the given lookback period
+// @param int LookBackPeriod - default is 50
+// @param float FilterVal1 - default is 0 (include All)
+// @param float FilterVal2 - default is 0 (will be used only in between scenario)
+// @param string FilterValOperator - Set to E for ==, NE for !=, G for >, GE for >=, L for <, LE for <= , BE for <= and >= (Between with Equal) and ather string for >< (Between with greater Lesser)
+// @param minTouch = Minimum Touches to be tested (default is 3)
+// @param ErrorRateTicks = if in case of exact touch is not happened how much error rate can be included (default is 10 minticks)
+// @param bool IncludeOpen - default is true
+// @param bool IncludeHigh - default is true
+// @param bool IncludeLow - default is true
+// @param bool IncludeClose - default is true
+// @returns tuples with MaxTouchValue and HighestRange and LowestRange
+export G_HighFreqValue(int LookBackPeriod = 50,float FilterVal1 = 0,float FilterVal2 = 0 ,string FilterValOperator = "G",int minTouch = 3, int ErrorRateTicks = 10, bool IncludeOpen = true, bool IncludeHigh = true, bool IncludeLow = true, bool IncludeClose = true) =>
+    bool NeedMaxTouch           = true
+    FilteredListOfArray         = array.new_float(0)
+    int LoadedValues            = 0
+    loadAllValues               = false
+    HighestH                    = ta.highest(LookBackPeriod)
+    LowestL                     = ta.lowest(LookBackPeriod)
+    if (FilterValOperator == "G" or FilterValOperator == "GE") and (FilterVal1 == 0 or FilterVal1 <= LowestL)
+        loadAllValues := true
+    if (FilterValOperator == "L" or FilterValOperator == "LE") and FilterVal1 >= HighestH
+        loadAllValues := true
+    for filval = 0 to LookBackPeriod by 1
+        if not loadAllValues
+            if IncludeOpen and OperatorChk(open[filval+ 1],FilterValOperator,FilterVal1, FilterVal2)
+                array.push(FilteredListOfArray,open[filval+ 1])
+                LoadedValues+=1
+            if IncludeHigh and OperatorChk(high[filval + 1],FilterValOperator,FilterVal1, FilterVal2)
+                array.push(FilteredListOfArray,high[filval + 1])
+                LoadedValues+=1
+            if IncludeLow and OperatorChk(low[filval + 1],FilterValOperator,FilterVal1, FilterVal2)
+                array.push(FilteredListOfArray,low[filval + 1])
+                LoadedValues+=1
+            if IncludeClose and OperatorChk(close[filval + 1],FilterValOperator,FilterVal1, FilterVal2)
+                array.push(FilteredListOfArray,close[filval + 1])
+                LoadedValues+=1
+        else
+            array.push(FilteredListOfArray,open[filval+ 1])
+            array.push(FilteredListOfArray,high[filval + 1])
+            array.push(FilteredListOfArray,low[filval + 1])
+            array.push(FilteredListOfArray,close[filval + 1])
+            LoadedValues+=4
+    UniqueListOfFilter      = array.new_float(0)
+    int intialLoop          = 0
+    int ValuesLoaded        = 0
+    HowManyUniqueFound = for ohlc_val in FilteredListOfArray
+        if intialLoop == 0
+            array.push(UniqueListOfFilter,ohlc_val)
+            ValuesLoaded+=1
+        else
+            if not array.includes(UniqueListOfFilter,ohlc_val)
+                array.push(UniqueListOfFilter,ohlc_val)
+                ValuesLoaded+=1
+        intialLoop+=1
+        ValuesLoaded
+    int MaxRepeatFound          = NeedMaxTouch ? minTouch < 3 ? 3 : minTouch : minTouch
+    float LimitTicks            = ErrorRateTicks * syminfo.mintick
+    float LimitTicks_           = (ErrorRateTicks * 10) * syminfo.mintick
+    TimesRepeatedArray          = array.new_float(0)
+    ListOfOutputValue           = array.new_float(0)
+    UpSideTimesRepeatedArray    = array.new_float(0)
+    UpSideListOfOutputValue     = array.new_float(0)
+    DnSideTimesRepeatedArray    = array.new_float(0)
+    DnSideListOfOutputValue     = array.new_float(0)
+    for UnqVal in UniqueListOfFilter
+        int TimesRepeated = 0
+        CalculateRepeats = for ohlc_val in FilteredListOfArray
+            if (ohlc_val >= (UnqVal - LimitTicks) and ohlc_val <= (UnqVal + LimitTicks))
+                TimesRepeated += 1
+            TimesRepeated
+        if CalculateRepeats > MaxRepeatFound
+            array.push(ListOfOutputValue,UnqVal)
+            array.push(TimesRepeatedArray,CalculateRepeats)
+        else
+            if CalculateRepeats <= MaxRepeatFound
+                if OperatorChk(UnqVal,"GE",HighestH - LimitTicks_, 0)
+                    array.push(UpSideListOfOutputValue,UnqVal)
+                    array.push(UpSideTimesRepeatedArray,CalculateRepeats)
+                if OperatorChk(UnqVal,"BE",LowestL, LowestL + LimitTicks_)
+                    array.push(DnSideListOfOutputValue,UnqVal)
+                    array.push(DnSideTimesRepeatedArray,CalculateRepeats)
+
+    MaxOfRepeats            = array.size(TimesRepeatedArray) > 0 ? array.max(TimesRepeatedArray) : 0
+    IndexOfMaxRepeat        = MaxOfRepeats != 0 ? array.indexof(TimesRepeatedArray,MaxOfRepeats) : -1
+    ValueTestedMaxNoOfTimes = IndexOfMaxRepeat != -1 ? array.get(ListOfOutputValue,IndexOfMaxRepeat) : 0
+
+    H1_MaxOfRepeats         = array.size(UpSideTimesRepeatedArray) > 0 ? array.max(UpSideTimesRepeatedArray) : 0
+    H1_IndexOfMaxRepeat     = H1_MaxOfRepeats != 0 ? array.indexof(UpSideTimesRepeatedArray,H1_MaxOfRepeats) : -1
+    H1_ValueRepeatedMax     = H1_IndexOfMaxRepeat != -1 ? array.get(UpSideListOfOutputValue,H1_IndexOfMaxRepeat) : 0
+
+    L1_MaxOfRepeats         = array.size(DnSideTimesRepeatedArray) > 0 ? array.max(DnSideTimesRepeatedArray) : 0
+    L1_IndexOfMaxRepeat     = L1_MaxOfRepeats != 0 ? array.indexof(DnSideTimesRepeatedArray,L1_MaxOfRepeats) : -1
+    L1_ValueRepeatedMax     = L1_IndexOfMaxRepeat != -1 ? array.get(DnSideListOfOutputValue,L1_IndexOfMaxRepeat) : 0
+
+    [ValueTestedMaxNoOfTimes,H1_ValueRepeatedMax,L1_ValueRepeatedMax]
+
+// @function to retrieve the Pivot High and Low points (Highest Point and the latest PH and similarly Lowest Point and the latest PL)
+// @param int StartScanFrom default is 150
+// @param float Source - default is close, will be used if the source is an external indicator
+// @param string PlotOnType - default is "HL" (possible use cases can be either "HL", "OC" or any any other string character so that it uses Source param to calculate the Pivot points)
+// @param int LBC - default is 4 Look Back period for Pivot points
+// @param int LBF - default is 2 Look forwar period for confirming the Pivot points
+// @returns tuples with useful information regarding pivot points
+export G_Pivots(int StartScanFrom = 150,float Source = close, simple string PlotOnType = "HL", int LBC = 4, int LBF = 2)=>
+    Initial_PH = nz(ta.pivothigh(PlotOnType == 'HL' ? G_CandleInfo("CandleHigh",0,true) :
+         PlotOnType == 'OC' ? math.max(G_CandleInfo("CandleOpen",0,true), G_CandleInfo("CandleClose",0,true)) :
+         Source,
+         LBC,
+         LBF),0.0)
+    Initial_PH_Candle = nz(ta.valuewhen(Initial_PH, bar_index[LBF], 0),0)
+    Initial_PL = nz(ta.pivotlow(
+         PlotOnType == 'HL' ? G_CandleInfo("CandleLow",0,true) :
+         PlotOnType == 'OC' ? math.min(G_CandleInfo("CandleOpen",0,true), G_CandleInfo("CandleClose",0,true)):
+         Source,
+         LBC,
+         LBF),0.0)
+    Initial_PL_Candle   = nz(ta.valuewhen(Initial_PL, bar_index[LBF], 0),0)
+    float First_PH          = na
+    float First_PL          = na
+    int FPH_Bar             = na
+    int FPL_Bar             = na
+    if BarToStartYourCalculation(StartScanFrom)
+        First_PH    := Initial_PH
+        First_PL    := Initial_PL
+        FPH_Bar     := Initial_PH_Candle
+        FPL_Bar     := Initial_PL_Candle
+
+    var SeriesOf_PH         = array.new_float(0)
+    var CandleInfoOf_PH     = array.new_int(0)
+    var SeriesOf_PL         = array.new_float(0)
+    var CandleInfoOf_PL     = array.new_int(0)
+    var sizeH               = array.size(SeriesOf_PH)
+    var sizeL               = array.size(SeriesOf_PL)
+    //========================== PIVOT HIGH CALCULATION ===============================
+    if First_PH != 0.00
+        if sizeH == 0
+            array.push(SeriesOf_PH,First_PH)
+            array.push(CandleInfoOf_PH,FPH_Bar)
+        else
+            if FPH_Bar - array.get(CandleInfoOf_PH, sizeH - 1) > 4 and array.get(SeriesOf_PH, sizeH - 1) >= First_PH
+                array.push(SeriesOf_PH,First_PH)
+                array.push(CandleInfoOf_PH,FPH_Bar)
+            else
+                array.pop(SeriesOf_PH)
+                array.pop(CandleInfoOf_PH)
+                array.push(SeriesOf_PH,First_PH)
+                array.push(CandleInfoOf_PH,FPH_Bar)
+
+
+    //========================== PIVOT LOW CALCULATION ===============================
+    if First_PL != 0.00
+        if sizeL == 0
+            array.push(SeriesOf_PL,First_PL)
+            array.push(CandleInfoOf_PL,FPL_Bar)
+        else
+            if FPL_Bar - array.get(CandleInfoOf_PL, sizeL - 1) > 4 and array.get(SeriesOf_PL, sizeL - 1) <= First_PL
+                array.push(SeriesOf_PL,First_PL)
+                array.push(CandleInfoOf_PL,FPL_Bar)
+            else
+                array.pop(SeriesOf_PL)
+                array.pop(CandleInfoOf_PL)
+                array.push(SeriesOf_PL,First_PL)
+                array.push(CandleInfoOf_PL,FPL_Bar)
+
+    float LastKnownPL           = 0
+    int LastKnownPLBar          = 0
+    float SecLowestPL           = 0
+    int SecLowestPLBar          = 0
+    int indexOfSecLowestPL      = 0
+    int indexOfLastKnownPLBar   = 0
+    CopyOfPL = array.copy(SeriesOf_PL)
+    if array.size(SeriesOf_PL)> 3
+        array.pop(CopyOfPL)
+        LastKnownPL := array.pop(CopyOfPL)
+        array.sort(CopyOfPL)
+        array.shift(CopyOfPL)
+        SecLowestPL := array.min(CopyOfPL)
+        indexOfSecLowestPL:= array.indexof(SeriesOf_PL,SecLowestPL)
+        indexOfLastKnownPLBar:= array.indexof(SeriesOf_PL,LastKnownPL)
+
+    float LastKnownPH           = 0
+    int LastKnownPHBar          = 0
+    float SecHighestPH          = 0
+    int SecHighestPHBar         = 0
+    int indexOfSecHighestPH     = 0
+    int indexOfLastKnownPHBar   = 0
+    CopyOfPH = array.copy(SeriesOf_PH)
+    if array.size(SeriesOf_PH)> 3
+        array.pop(CopyOfPH)
+        LastKnownPH := array.pop(CopyOfPH)
+        array.sort(CopyOfPH,order.descending)
+        array.shift(CopyOfPH)
+        SecHighestPH := array.max(CopyOfPH)
+        indexOfSecHighestPH:= array.indexof(SeriesOf_PH,SecHighestPH)
+        indexOfLastKnownPHBar:= array.indexof(SeriesOf_PH,LastKnownPH)
+
+
+    float LL_Val                = 0
+    int LL_Bar                  = 0
+    float HL_Val                = 0
+    int HL_Bar                  = 0
+    int indexOfMin              = 0
+    float HH_Val                = 0
+    int HH_Bar                  = 0
+    float LH_Val                = 0
+    int LH_Bar                  = 0
+    int DindexOfMax             = 0
+    LL_Val                      := array.min(SeriesOf_PL)
+    HH_Val                      := array.max(SeriesOf_PH)
+    indexOfMin                  := array.indexof(SeriesOf_PL,array.min(SeriesOf_PL))
+    DindexOfMax                 := array.indexof(SeriesOf_PH,array.max(SeriesOf_PH))
+    int cntr                    = 0
+    for ele in CandleInfoOf_PL
+        if cntr == indexOfMin
+            LL_Bar:= ele
+        else if cntr == indexOfSecLowestPL
+            SecLowestPLBar:= ele
+        else if cntr == indexOfLastKnownPLBar
+            LastKnownPLBar:= ele
+        else
+            HL_Bar:= ele
+        cntr+= 1
+    int cntr1 = 0
+    for ele in SeriesOf_PL
+        HL_Val:= ele
+        cntr1+= 1
+    int Rcntr = 0
+    for ele in CandleInfoOf_PH
+        if Rcntr == DindexOfMax
+            HH_Bar:= ele
+        else if Rcntr == indexOfSecHighestPH
+            SecHighestPHBar:= ele
+        else if Rcntr == indexOfLastKnownPHBar
+            LastKnownPHBar:= ele
+        else
+            LH_Bar:= ele
+        Rcntr+= 1
+    int Rcntr1 = 0
+    for ele in SeriesOf_PH
+        LH_Val:= ele
+        cntr1+= 1
+
+    [LL_Bar,
+     SecLowestPLBar,
+     LastKnownPLBar,
+     HL_Bar,
+     LL_Val,
+     SecLowestPL,
+     LastKnownPL,
+     HL_Val,
+     HH_Bar,
+     SecHighestPHBar,
+     LastKnownPHBar,
+     LH_Bar,
+     HH_Val,
+     SecHighestPH,
+     LastKnownPH,
+     LH_Val]
+
+// [YYYY, YY, M, MM, MMM, MMMM, D, DD, DDMMYY_Dot, DDMMYY_Ifen, DDMMYY_FSlash, DDMMMYYYY_Space, DDMMMYYYY_Ifen] = DateFormatterFx()
+// @function DateFormatterFx Helps you to convert the Date
+// @param    ForWhatTime Specify the time in int format to get the date related attributes
+// @returns  YYYY, YY, M, MM, MMM, MMMM, D, DD
+export DateFormatterFx(int ForWhatTime = 0) =>
+    dt   = ForWhatTime == 0 ? timenow : ForWhatTime
+    Y1   = year(      dt)
+    M1   = month(     dt)
+    D1   = dayofmonth(dt)
+    M    = str.tostring(M1)
+    [MMM, MMMM, MM] = switch M1
+        1  => ['JAN',   'JANUARY', "0" + str.tostring(M1)]
+        2  => ['FEB',  'FEBRUARY', "0" + str.tostring(M1)]
+        3  => ['MAR',     'MARCH', "0" + str.tostring(M1)]
+        4  => ['APR',     'APRIL', "0" + str.tostring(M1)]
+        5  => ['MAY',       'MAY', "0" + str.tostring(M1)]
+        6  => ['JUN',      'JUNE', "0" + str.tostring(M1)]
+        7  => ['JUL',      'JULY', "0" + str.tostring(M1)]
+        8  => ['AUG',    'AUGUST', "0" + str.tostring(M1)]
+        9  => ['SEP', 'SEPTEMBER', "0" + str.tostring(M1)]
+        10 => ['OCT',   'OCTOBER', str.tostring(M1)]
+        11 => ['NOV',  'NOVEMBER', str.tostring(M1)]
+        12 => ['DEC',  'DECEMBER', str.tostring(M1)]
+    [D,DD] = switch D1
+        1  => [str.tostring(D1), "0" + str.tostring(D1)]
+        2  => [str.tostring(D1), "0" + str.tostring(D1)]
+        3  => [str.tostring(D1), "0" + str.tostring(D1)]
+        4  => [str.tostring(D1), "0" + str.tostring(D1)]
+        5  => [str.tostring(D1), "0" + str.tostring(D1)]
+        6  => [str.tostring(D1), "0" + str.tostring(D1)]
+        7  => [str.tostring(D1), "0" + str.tostring(D1)]
+        8  => [str.tostring(D1), "0" + str.tostring(D1)]
+        9  => [str.tostring(D1), "0" + str.tostring(D1)]
+        =>    [str.tostring(D1), str.tostring(D1)]
+
+    YYYY                = str.tostring(Y1)
+    string[] _chars     = str.split(YYYY, "")
+    int _len            = array.size(_chars)
+    int _ofPos          = 1
+    string[] _substr    = array.new_string(0)
+    if _ofPos >= 0 and _ofPos < _len - 1
+        _substr         := array.slice(_chars, _ofPos + 1, _len)
+    string YY           = array.join(_substr, "")
+
+    DDMMYY_Dot = DD + "." + MM + "." + YY
+    DDMMYY_Ifen = DD + "-" + MM + "-" + YY
+    DDMMYY_FSlash = DD + "/" + MM + "/" + YY
+    DDMMMYYYY_Space = DD + " " + MMM + " " + YYYY
+    DDMMMYYYY_Ifen = DD + "-" + MMM + "-" + YYYY
+
+    [YYYY, YY, M, MM, MMM, MMMM, D, DD, DDMMYY_Dot, DDMMYY_Ifen, DDMMYY_FSlash, DDMMMYYYY_Space, DDMMMYYYY_Ifen]
+
+// int[] TradeNoCounter_       = array.from(1,2,3,4,5,6,7)
+// int[] TradeEntryCandle_     = array.from(22122,22190,22201,22243,22257,22262,22278)
+// int[] TradeExitCandle_      = array.from(22124,22191,22213,22255,22258,22277)
+// int[] TradedQty_            = array.from(1,1,1,1,1,1,1)
+// float[] TradeEntryPrice_    = array.from(100.0,102.0,103.0,100.0,100.0,100.0,100.0)
+// float[] TradeExitPrice_     = array.from(101.0,103.0,102.0,101.0,99.0,101.0)
+// string[] TradeType_         = array.from("Buy|a","Buy|a","Sell|a","Buy|a","Sell|a","Buy|a","Sell|a")
+// string[] TradeDate_         = array.from("13-AUG-2022","14-AUG-2022","15-AUG-2022","15-AUG-2022","15-AUG-2022","16-AUG-2022","15-AUG-2022")
+
+// LoadValues(FromArrayName,ToArrayName) =>
+//     for echItem in FromArrayName
+//         array.push(ToArrayName,echItem)
+
+
+// @function to retrieve the Trade related informations
+// @param Specify the Name of the Array against related parameters
+// @returns tuples with useful information regarding Trades taken
+export Get_TradeManagementInfo(int[] TradeNoCounter, int[] TradedQty,
+     int[] TradeEntryCandle,
+     int[] TradeExitCandle,
+     float[] TradeEntryPrice,
+     float[] TradeExitPrice,
+     string[] TradeType,
+     color BuyOrProfitColor = color.lime,
+     color Nutral = color.aqua,
+     color SellOrLossColor = color.red,
+     string[] EntryDateStamp,
+     string PNL_Of_SpecificDate = "DD-MMM-YYYY"
+     ) =>
+
+    bool LastTradeClosed        = array.size(TradeNoCounter) == array.size(TradeExitCandle) ? true : false
+    StrTradeType                = str.split(array.size(TradeNoCounter) > 0 ? array.get(TradeType,array.size(TradeNoCounter) - 1) : "a|a","|")
+    Last_Trade_Number           = array.size(TradeNoCounter) > 0 ? str.tostring(array.get(TradeNoCounter,array.size(TradeNoCounter) - 1)) : "0"
+    Last_Trade_Type             = array.get(StrTradeType,0)
+    Last_Trade_Actual           = array.size(TradeNoCounter) > 0 ? array.get(TradeType,array.size(TradeNoCounter) - 1) : "Finding Best Trade Setup"
+    color Last_Trade_Type_Color = Last_Trade_Type == "Buy" ? BuyOrProfitColor : Last_Trade_Type == "Sell" ? SellOrLossColor : Nutral
+    Last_Trade_Entry_Candle     = array.size(TradeNoCounter) > 0 ? array.get(TradeEntryCandle,array.size(TradeNoCounter) - 1) : 0
+    Last_Trade_Entry_Price      = array.size(TradeNoCounter) > 0 ? array.get(TradeEntryPrice,array.size(TradeNoCounter) - 1) : 0
+    Last_Trade_Exit_Candle      = LastTradeClosed and array.size(TradeNoCounter) > 0 ? array.get(TradeExitCandle,array.size(TradeNoCounter) - 1) : bar_index
+    Last_Trade_Exit_Price       = LastTradeClosed and array.size(TradeNoCounter) > 0 ? array.get(TradeExitPrice,array.size(TradeNoCounter) - 1) : close
+    Last_Traded_Qty             = array.size(TradeNoCounter) > 0 ? array.get(TradedQty,array.size(TradeNoCounter) - 1) : 0
+    color Last_Trade_PNLColor   = Nutral
+    float Last_Trade_PNL        = 0
+    if Last_Trade_Type == "Buy" and array.size(TradeNoCounter) > 0
+        Last_Trade_PNL      := math.round_to_mintick((Last_Trade_Exit_Price - Last_Trade_Entry_Price) * Last_Traded_Qty)
+        Last_Trade_PNLColor := Last_Trade_Exit_Price > Last_Trade_Entry_Price ? BuyOrProfitColor : SellOrLossColor
+    else if Last_Trade_Type == "Sell" and array.size(TradeNoCounter) > 0
+        Last_Trade_PNL      := math.round_to_mintick((Last_Trade_Entry_Price - Last_Trade_Exit_Price) * Last_Traded_Qty)
+        Last_Trade_PNLColor := Last_Trade_Exit_Price < Last_Trade_Entry_Price ? BuyOrProfitColor : SellOrLossColor
+    else
+        Last_Trade_PNL := 0
+    ProfitOrLossVal         = array.new_float(0)
+    ProfitOnlyTrade         = array.new_float(0)
+    LossOnlyTrade           = array.new_float(0)
+    Long_ProfitOnlyTrade    = array.new_int(0)
+    Short_ProfitOnlyTrade   = array.new_int(0)
+    int LongCntr            = 0
+    int LongPCntr           = 1
+    int ShortCntr           = 0
+    int ShortPCntr          = 1
+    if LastTradeClosed
+        int cntr            = 0
+        for echEntryPrice in TradeEntryPrice
+            Extp            = array.get(TradeExitPrice,cntr)
+            StrTradeType_   = str.split(array.get(TradeType,cntr),"|")
+            trdType         = array.get(StrTradeType_,0)
+            qtyt            = array.get(TradedQty,cntr)
+            ArrivedValue    = math.round(((echEntryPrice - Extp) * qtyt),2)
+            if trdType == "Buy"
+                LongCntr    += 1
+                if ArrivedValue < 0
+                    array.push(ProfitOnlyTrade, ArrivedValue * -1)
+                    array.push(ProfitOrLossVal, ArrivedValue * -1)
+                    array.push(Long_ProfitOnlyTrade, LongPCntr)
+                else
+                    array.push(LossOnlyTrade, ArrivedValue * -1)
+                    array.push(ProfitOrLossVal, ArrivedValue * -1)
+            else
+                if trdType == "Sell"
+                    ShortCntr    += 1
+                    if ArrivedValue < 0
+                        array.push(LossOnlyTrade, ArrivedValue)
+                        array.push(ProfitOrLossVal, ArrivedValue)
+                    else
+                        array.push(ProfitOnlyTrade, ArrivedValue)
+                        array.push(ProfitOrLossVal, ArrivedValue)
+                        array.push(Short_ProfitOnlyTrade, ShortPCntr)
+            cntr += 1
+    else
+        int cntra = 0
+        for echEntryPrice in TradeEntryPrice
+            if cntra < array.size(TradeExitCandle)
+                Extp            = array.get(TradeExitPrice,cntra)
+                StrTradeType_   = str.split(array.get(TradeType,cntra),"|")
+                trdType         = array.get(StrTradeType_,0)
+                qtyt            = array.get(TradedQty,cntra)
+                ArrivedValue    = math.round(((echEntryPrice - Extp) * qtyt),2)
+                if trdType == "Buy"
+                    LongCntr    += 1
+                    if ArrivedValue < 0
+                        array.push(ProfitOnlyTrade, ArrivedValue * -1)
+                        array.push(ProfitOrLossVal, ArrivedValue * -1)
+                        array.push(Long_ProfitOnlyTrade, LongPCntr)
+                    else
+                        array.push(LossOnlyTrade, ArrivedValue * -1)
+                        array.push(ProfitOrLossVal, ArrivedValue * -1)
+                else
+                    if trdType == "Sell"
+                        ShortCntr    += 1
+                        if ArrivedValue < 0
+                            array.push(LossOnlyTrade, ArrivedValue)
+                            array.push(ProfitOrLossVal, ArrivedValue)
+                        else
+                            array.push(ProfitOnlyTrade, ArrivedValue)
+                            array.push(ProfitOrLossVal, ArrivedValue)
+                            array.push(Short_ProfitOnlyTrade, ShortPCntr)
+                cntra += 1
+
+    int TotalLongTrades         = LongCntr
+    int TotalShortTrades        = ShortCntr
+    int TotalLongPorfitTrades   = array.sum(Long_ProfitOnlyTrade)
+    int TotalShortPorfitTrades  = array.sum(Short_ProfitOnlyTrade)
+    LongProfitPCt               = nz(TotalLongPorfitTrades,0) == 0 ? "0%" : str.tostring((TotalLongPorfitTrades / TotalLongTrades) * 100,"#.00") + "%"
+    ShortProfitPCt              = nz(TotalShortPorfitTrades,0) == 0 ? "0%" : str.tostring((TotalShortPorfitTrades / TotalShortTrades) * 100,"#.00") + "%"
+
+    int NoOfProfitableTrade     = 0
+    int NoOfLossTrade           = 0
+    ProfitOrLossValOfSpecificDt = array.new_float(0)
+    TodaydaysPNL                = array.new_float(0)
+    YesterdaysPNL               = array.new_float(0)
+    Last7DaysPNL                = array.new_float(0)
+    ThisWeekPNL                 = array.new_float(0)
+    ThisMonthPNL                = array.new_float(0)
+    ThisQtrPNL                  = array.new_float(0)
+    PositionOfSpecificDate      = array.indexof(EntryDateStamp,PNL_Of_SpecificDate)
+    TNow                        = timenow
+    [CD_YYYY, CD_YY, CD_M, CD_MM, CD_MMM, CD_MMMM, CD_D, CD_DD, CD_DDMMYY_Dot, CD_DDMMYY_Ifen, CD_DDMMYY_FSlash, CD_DDMMMYYYY_Space, CD_DDMMMYYYY_Ifen] = DateFormatterFx(TNow)
+    CurrentDate                 = CD_DDMMMYYYY_Ifen
+    [DayMinus1, DayMinus3, DayMinus1W, TimeMinusforWeekStart, MonthStartDate, NextMonthStartDate, _3MonthStartDate] = TimeReduction(TNow)
+    [YD_YYYY, YD_YY, YD_M, YD_MM, YD_MMM, YD_MMMM, YD_D, YD_DD, YD_DDMMYY_Dot, YD_DDMMYY_Ifen, YD_DDMMYY_FSlash, YD_DDMMMYYYY_Space, YD_DDMMMYYYY_Ifen] = DateFormatterFx((TNow - DayMinus1))
+    YesterdayDate                = YD_DDMMMYYYY_Ifen
+    [L7_YYYY, L7_YY, L7_M, L7_MM, L7_MMM, L7_MMMM, L7_D, L7_DD, L7_DDMMYY_Dot, L7_DDMMYY_Ifen, L7_DDMMYY_FSlash, L7_DDMMMYYYY_Space, L7_DDMMMYYYY_Ifen] = DateFormatterFx((TNow - DayMinus1W))
+    DateOfLastWk                 = YD_DDMMMYYYY_Ifen
+    PositionOfLWKDate            = array.indexof(EntryDateStamp,DateOfLastWk)
+    [TW_YYYY, TW_YY, TW_M, TW_MM, TW_MMM, TW_MMMM, TW_D, TW_DD, TW_DDMMYY_Dot, TW_DDMMYY_Ifen, TW_DDMMYY_FSlash, TW_DDMMMYYYY_Space, TW_DDMMMYYYY_Ifen] = DateFormatterFx((TNow - TimeMinusforWeekStart))
+    DateOfThisWk                 = TW_DDMMMYYYY_Ifen
+    PositionOfTWKDate            = array.indexof(EntryDateStamp,DateOfThisWk)
+    [TM_YYYY, TM_YY, TM_M, TM_MM, TM_MMM, TM_MMMM, TM_D, TM_DD, TM_DDMMYY_Dot, TM_DDMMYY_Ifen, TM_DDMMYY_FSlash, TM_DDMMMYYYY_Space, TM_DDMMMYYYY_Ifen] = DateFormatterFx((TNow - MonthStartDate))
+    DateOfThisMt                 = TM_DDMMMYYYY_Ifen
+    PositionOfTMtDate            = array.indexof(EntryDateStamp,DateOfThisMt)
+    [TQ_YYYY, TQ_YY, TQ_M, TQ_MM, TQ_MMM, TQ_MMMM, TQ_D, TQ_DD, TQ_DDMMYY_Dot, TQ_DDMMYY_Ifen, TQ_DDMMYY_FSlash, TQ_DDMMMYYYY_Space, TQ_DDMMMYYYY_Ifen] = DateFormatterFx((TNow - _3MonthStartDate))
+    DateOfThisQtr                = TQ_DDMMMYYYY_Ifen
+    PositionOfTQtDate            = array.indexof(EntryDateStamp,DateOfThisQtr)
+    for [index, PorL] in ProfitOrLossVal
+        if PorL > 0
+            NoOfProfitableTrade += 1
+        if PorL < 0
+            NoOfLossTrade += 1
+        if index >= PositionOfSpecificDate and PositionOfSpecificDate > 0
+            array.push(ProfitOrLossValOfSpecificDt, PorL)
+
+        if array.get(EntryDateStamp, index) == CurrentDate
+            array.push(TodaydaysPNL, PorL)
+
+        if array.get(EntryDateStamp, index) == YesterdayDate
+            array.push(YesterdaysPNL, PorL)
+
+        if index >= PositionOfLWKDate and PositionOfLWKDate > 0
+            array.push(Last7DaysPNL, PorL)
+
+        if index >= PositionOfTWKDate and PositionOfTWKDate > 0
+            array.push(ThisWeekPNL, PorL)
+
+        if index >= PositionOfTMtDate and PositionOfTMtDate > 0
+            array.push(ThisMonthPNL, PorL)
+
+        if index >= PositionOfTQtDate and PositionOfTQtDate > 0
+            array.push(ThisQtrPNL, PorL)
+
+    MaxProfit               = array.size(ProfitOnlyTrade) > 0 ? array.max(ProfitOnlyTrade) : 0
+    MaxLoss                 = array.size(LossOnlyTrade) > 0 ? array.min(LossOnlyTrade) : 0
+    TotalCompletedTrades    = array.size(ProfitOrLossVal)
+    NetPosition             = array.size(ProfitOrLossVal) > 0 ? array.sum(ProfitOrLossVal) : 0
+    NetPositionOfSpcDte     = array.size(ProfitOrLossValOfSpecificDt) > 0 ? array.sum(ProfitOrLossValOfSpecificDt) : 0
+    NetPositionOfCurDte     = array.size(TodaydaysPNL) > 0 ? array.sum(TodaydaysPNL) : 0
+    NetPositionOfYesDte     = array.size(YesterdaysPNL) > 0 ? array.sum(YesterdaysPNL) : 0
+    NetPositionOfL7Dte      = array.size(Last7DaysPNL) > 0 ? array.sum(Last7DaysPNL) : 0
+    NetPositionOfTWDte      = array.size(ThisWeekPNL) > 0 ? array.sum(ThisWeekPNL) : 0
+    NetPositionOfTMDte      = array.size(ThisMonthPNL) > 0 ? array.sum(ThisMonthPNL) : 0
+    NetPositionOfTQDte      = array.size(ThisQtrPNL) > 0 ? array.sum(ThisQtrPNL) : 0
+    ProfitPCt               = nz(NoOfProfitableTrade,0) == 0 ? "0%" : str.tostring((NoOfProfitableTrade / TotalCompletedTrades) * 100,"#.00") + "%"
+
+    [LastTradeClosed,
+     Last_Trade_Number,
+     Last_Trade_Type,
+     Last_Trade_Actual,
+     Last_Trade_Type_Color,
+     Last_Trade_Entry_Candle,
+     Last_Trade_Entry_Price,
+     Last_Trade_Exit_Candle,
+     Last_Trade_Exit_Price,
+     Last_Trade_PNL,
+     Last_Trade_PNLColor,
+     Last_Traded_Qty,
+     NoOfProfitableTrade,
+     NoOfLossTrade,
+     MaxProfit,
+     MaxLoss,
+     TotalCompletedTrades,
+     ProfitPCt,
+     NetPosition,
+     NetPositionOfSpcDte,
+     NetPositionOfCurDte,
+     NetPositionOfYesDte,
+     NetPositionOfL7Dte,
+     NetPositionOfTWDte,
+     NetPositionOfTMDte,
+     NetPositionOfTQDte,
+     nz(TotalLongTrades,0),
+     nz(TotalLongPorfitTrades,0),
+     LongProfitPCt,
+     nz(TotalShortTrades,0),
+     nz(TotalShortPorfitTrades,0),
+     ShortProfitPCt]
+
+// [a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25,a26,a27,a28,a29,a30,a31,a32] = Get_TradeManagementInfo(TradeNoCounter_,TradedQty_,TradeEntryCandle_,TradeExitCandle_,TradeEntryPrice_,TradeExitPrice_,TradeType_,color.lime,color.lime,color.lime,TradeDate_,"11-AUG-2022")
+// plot(a30)
+// plot(a31)
+// plot(a24)
+// plot(a27)
+// plot(a28)
+
+
+// a60 = label.new(bar_index[0], high, SingleOut)
+// label.delete(a60[0])
+
+
+// @function to extract Symbol Name
+// @param _str SymbolName with Exchange prefix
+// @param _of Separator default is ":"
+export GetTicker(string _str, string _of = ":") =>
+    // string _str: string to separate.
+    // string _op : separator character.
+    string[] _chars     = str.split(_str, "")
+    int _len            = array.size(_chars)
+    int _ofPos          = array.indexof(_chars, _of)
+    string[] _substr    = array.new_string(0)
+    if _ofPos >= 0 and _ofPos < _len - 1
+        _substr         := array.slice(_chars, _ofPos + 1, _len)
+    string _return      = array.join(_substr, "")
+
+
+// @function to extract Symbol Prefix
+// @param _str SymbolName with Exchange prefix
+// @param _of Separator default is ":"
+export GetTickerPrfx(string _str, string _of = ":") =>
+    // string _str: string to separate.
+    // string _op : separator character.
+    string[] _chars     = str.split(_str, "")
+    int _len            = array.size(_chars)
+    int _ofPos          = array.indexof(_chars, _of)
+    string[] _substr    = array.new_string(0)
+    if _ofPos >= 0 and _ofPos < _len - 1
+        _substr         := array.slice(_chars, 0, _ofPos)
+    string _return      = array.join(_substr, "")
+
+
+// @function to extract lineStrengthIndex
+// @param LineReference LineValue
+// @param LookBackPeriod No Of Candles to consider
+// @param ErrorRateTicks whats the error rate
+export G_RespectingLineIndex(float LineReference, int LookBackPeriod, float ErrorRateTicks) =>
+    ATR14                                       = ta.atr(14)
+    ListOfLineValueforLookBackCandles           = array.new_float(0)
+    for filval                                  = 0 to LookBackPeriod by 1
+        array.push(ListOfLineValueforLookBackCandles, math.round_to_mintick(LineReference[filval + 1]))
+    int CounterTouch                            = 0
+    int idx                                     = 0
+    for ech in ListOfLineValueforLookBackCandles
+        MinValOfCandle  = math.min(open[idx + 1],high[idx + 1],low[idx + 1],close[idx + 1])
+        MaxValOfCandle  = math.max(open[idx + 1],high[idx + 1],low[idx + 1],close[idx + 1])
+        OpenCloseChk    = (open[idx + 1] >= ech and close[idx + 1] >= ech) or (open[idx + 1] <= ech and close[idx + 1] <= ech) ? true : false
+        LB              = ech - math.round_to_mintick(ATR14 * ErrorRateTicks)
+        UB              = ech + math.round_to_mintick(ATR14 * ErrorRateTicks)
+        if (OperatorChk(MinValOfCandle, "BE", LB, UB) or OperatorChk(MaxValOfCandle, "BE", LB, UB)) and OpenCloseChk
+            CounterTouch += 1
+        idx += 1
+    Output  = CounterTouch
+
+// @function to retrieve the JSON Format for DhanHQ
+// @param Secret is the API Secret Key
+// @param Qty is the Qty You want to trade with
+// @param BasketID is the Basket Key ID from Dhan HQ default is 0
+// @param Direction B for Buy | Long or S for Sell | Short
+// @param ExecuteAt MKT for MarketPrice or LMT for LimitPrice
+// @param TriggerPrice Used only if the Execution is at LMT
+// @param OrderType I for Intraday or C for Positional
+export CreateJSON(string Secret, string Qty, string TradeReferenceScript = syminfo.tickerid, string BasketID = "0", string Direction = "B", string ExecuteAt = "MKT", string TriggerPrice = "0", string OrderType = "I") =>
+    Prfx = GetTickerPrfx(TradeReferenceScript)
+    Tker = GetTicker(TradeReferenceScript)
+    if BasketID == "0"
+        Output = '{"transactionType":"'                                 + Direction    +
+         '","orderType":"'                                              + ExecuteAt    +
+         '","quantity":"'                                               + Qty          +
+         '","price":"'                                                  + TriggerPrice +
+         '","exchange":"' + Prfx + '","secret":"'                       + Secret       +
+         '","tradingSymbol":"' + Tker + '","productType":"'             + OrderType    +
+         '"}'
+    else
+        Output = '{"secret":"' + Secret + '","alertType":"basket","basket_id":"' + BasketID + '"}'
+
+// @param ExpectedOutput AcceptableValue = "Name", "Type", "Exp"
+export ScriptConvertor(string ExpectedOutput = "Name", string DefTker = "", string DefType ="")=>
+    Script          = DefTker == "" ? syminfo.ticker    : DefTker
+    TypeOfScript    = if DefType == ""
+        syminfo.type
+    else
+        if DefType == "F"
+            "futures"
+        else if DefType == "E"
+            "stock"
+        else if DefType == "I"
+            "index"
+        else
+            "Others"
+    Output          = ""
+    if ExpectedOutput == "Type"
+        Output := switch TypeOfScript
+            "stock"     => "E"
+            "futures"   => "F"
+            "index"     => "I"
+            =>             "U"
+    else if ExpectedOutput == "Name"
+        PreOutput = switch TypeOfScript
+            "stock"     => "E"
+            "futures"   => "F"
+            "index"     => "I"
+            =>             "U"
+
+        if PreOutput == "E" or PreOutput == "I"
+            Output                  := Script
+        else
+            if PreOutput == "F" and DefTker != ""
+                Output                  := str.replace(str.replace(Script, "1!", ""),"2", "")
+            else
+                if DefTker == ""
+                    Output              := Script
+                else
+                    Output              := "U1"
+    else
+        if ExpectedOutput == "Exp"
+            PreOutput = switch TypeOfScript
+                "stock"     => "E"
+                "futures"   => "F"
+                "index"     => "I"
+                =>             "U"
+            if PreOutput == "F"
+                CheckExc            = str.contains(Script, "1!") or str.contains(Script, "2!")
+                if CheckExc
+                    if str.contains(Script, "1!")
+                        Output      := "C"
+                    else
+                        if str.contains(Script, "2!")
+                            Output  := "N"
+                        else
+                            Output  := "C"
+                else
+                    Output          := "C"
+            else
+                Output              := "U2"
+        else
+            Output                  := "Something"
+
+
+export DiscordBasicJSON(bool OnlyJoin = false, string JoinText = "", int MainOption = 1, int SubOption = 0, string AlternativeSource = "", string AlternativeScriptType = "") =>
+    DiscText = switch MainOption
+        1 => "PNL"
+        2 => "MTM"
+        3 => "FUNDS"
+        4 => "CEXP"
+        5 => "NEXP"
+        6 => "ABAL"
+        7 => "MAR"
+        8 => "PAYIN"
+        9 => "PAYOUT"
+        10 => SubOption == 0 ? "PRICE " : SubOption == 1 ? "PRICE BNF" : "PRICE NIF"
+        11 => "EXITBCO ALL"
+        12 => "EXIT_ALL"
+    if not OnlyJoin
+        if ScriptConvertor("Type", AlternativeSource, AlternativeScriptType) == "F"
+            Output = MainOption != 10 or (MainOption == 10 and SubOption != 0) ? '{"content":"' + DiscText +'"}' : MainOption == 10 and SubOption == 0 ? '{"content":"' + DiscText + ScriptConvertor("Name", AlternativeSource, AlternativeScriptType) + " " + ScriptConvertor("Exp", AlternativeSource, AlternativeScriptType) + "F" +'"}' : '{"content":"' + DiscText +'"}'
+        else
+            Output = MainOption != 10 or (MainOption == 10 and SubOption != 0) ? '{"content":"' + DiscText +'"}' : MainOption == 10 and SubOption == 0 ? '{"content":"' + DiscText + ScriptConvertor("Name", AlternativeSource, AlternativeScriptType) + '"}' : '{"content":"' + DiscText +'"}'
+    else
+        Output = '{"content":"' + JoinText +'"}'
+
+// @param TradeType acceptable Inputs are I (for MIS / Intraday), CO (for Cover Order), BO (for Bracket Order)
+// @param BuyOrSell acceptable Inputs are B or S
+// @param EqOrFutOrOp acceptable Inputs are E (for Equity), F (for Futures), O (for Options)
+// @param TradeQty string format (default = 25 Qty)
+// @param ScriptName string format
+// @param OrderType acceptable Inputs are "" (for Market), "XXX.XX" (143.05 to place Limit Orders at 143.05), Continued Below 2 other acceptable inputs...
+// @param OrderType "X.X%" (1.25% to place Limit orders at specified percentage Below Market price for BUY, and Above Market price for SELL)
+// @param OrderType "A X.X%" or "B X.X%" or "A 154.0" or "B 125.0" (A 0.75% to place BUY SL-Limit orders at specified percentage Above Market price for BUY, B 1.05% to place SELL SL-Limit orders at specified percentage Below Market price for SELL)
+// @param HowDeep acceptable Inputs are "0" (for ATM option), "1" (Positive Numbers for ITM), "-1" (Negative Numbers for OTM) or "" (for Non Expiry Orders)
+// @param CEorPE acceptable Inputs are CE, PE or "" (for Non Option Orders)
+// @param Expiry acceptable Inputs are C (for Current Expiry), N (for Next Expiry) or "" (for Non Expiry Orders)
+// @param BO_Tgt acceptable Inputs are "X" (5 for Rs.5 Target Point), "X.X%" (1.2% for capturing specified percentage rise in price as Target Points for BUY) or "" (for Non BO Orders)
+// @param BO_SL acceptable Inputs are "X" (3 for Rs.3 SL Point), "X.X%" (0.75% for specified percentage fall in price as SL Points for BUY) or "" (for Non BO Orders)
+// @param CO_SL acceptable Inputs are "+X" (+3 for Rs.3 above current price for Sell Trade), "-X" (-5 for Rs.5 below current price for Buy Trade), "XXX.X" (125.5 will be applied as SL Value for CO Order) or "" (for Non Expiry Orders)
+export DiscordTradingJSON(string TradeType = "I", string BuyOrSell = "B", string EqOrFutOrOp = "O", string TradeQty = "25", string ScriptName, string OrderType = "",
+     string HowDeep = "", string CEorPE = "", string Expiry = "", string BO_Tgt = "", string BO_SL = "", string CO_SL = "")=>
+
+    TT = switch TradeType
+        "CO" => "CO"
+        "BO" => "BO"
+        => ""
+    BS = switch BuyOrSell
+        "B" => "B"
+        => "S"
+    EFO = switch EqOrFutOrOp
+        "O" => "O"
+        "F" => "F"
+        => "E"
+    Ex = switch Expiry
+        "N" => "N"
+        => ""
+
+
+    IsCO        = CO_SL != "" and TT == "CO" and (EFO == "E" or EFO == "F") and OrderType == ""
+    IsBO        = BO_SL != "" and BO_Tgt != "" and TT == "BO" and (EFO == "E" or EFO == "F") and OrderType == ""
+    IsOptions   = EFO == "O" and HowDeep != "" and TT == "" and CEorPE != "" and Expiry != ""
+
+    Construct = if TT == ""
+        if EFO == "E" or EFO == "F"
+            if OrderType == ""
+                BS + EFO + " " + TradeQty + " " + ScriptName
+            else
+                BS + EFO + " " + TradeQty + " " + ScriptName + " " + OrderType
+        else if EFO == "O" and IsOptions and not IsBO and not IsCO
+            if OrderType == ""
+                BS + EFO + " " + TradeQty + " " + ScriptName + "?" + HowDeep + CEorPE + "?" + Ex
+            else
+                BS + EFO + " " + TradeQty + " " + ScriptName + "?" + HowDeep + CEorPE + "?" + Ex + " " + OrderType
+        else
+            "Something Wrong"
+    else
+        if IsCO
+            TT + BS + EFO + " " + TradeQty + " " + ScriptName + " " + CO_SL
+        else if IsBO
+            TT + BS + EFO + " " + TradeQty + " " + ScriptName + " " + BO_Tgt + " " + BO_SL
+        else
+            "Something Wrong"
+
+// @param _cond acceptable Inputs are seconds to wait and then trigger the output as NA
+// @param _resetCond acceptable Inputs are true or false
+export TriggerAfter(int cond = 15, bool _resetCond = barstate.isnew) =>
+    // bool _cond     : condition to test.
+    // bool _resetCond: when `true`, the duration resets.
+    _cond = timenow <= (time + (cond * 1000))
+    varip float _timeBegin = na
+    varip bool  _lastCond  = false
+    if _resetCond
+        // Reset time if required.
+        _timeBegin := _cond ? timenow : na
+    else if _cond
+        if not _lastCond
+            // First occurrence of true `_cond`; save beginnning time.
+            _timeBegin := timenow
+    else
+        // Condition is not true; reset beginning time.
+        _timeBegin := na
+    // Remember the last state of the `_cond` so we can detect transitions.
+    _lastCond := _cond
+    // Return seconds since beginning of condition, or `na`.
+    float _return = (timenow - _timeBegin) / 1000
+
+// @param bool Deploy acceptable Inputs are true for Deploy based Strategy Alert or false for Adding Strategy Alert type
+// @param string StrategyShortName specify the shortname for either deploying based or Adding based
+// @param string StrategyFullName specify the fullname for strategy Addition
+// @param ArrayString LegValues specify the array containing list of Leg Values else use array.new_string(0)
+export StrategyFx(bool Deploy = true, string StrategyShortName = "", string OnScript = "", int TradingQty = 0, string[] LegValues, string StrategyFullName = "") =>
+    Output              = ""
+    if Deploy and StrategyShortName != "" and TradingQty == 0
+        Output          := '{"content":"STRGY DEP ' + str.upper(StrategyShortName) +'"}'
+    else if Deploy and StrategyShortName != "" and TradingQty > 0 and OnScript != ""
+        Output          := '{"content":"STRGY DEP ' + str.upper(StrategyShortName) + ' ' + str.upper(OnScript) + ' ' + str.tostring(TradingQty) +'"}'
+    else
+        if not Deploy and array.size(LegValues) > 0 and StrategyShortName != "" and StrategyFullName != ""
+            InitialText     = '{"content":"STRGY ADD '
+            NameText        = '{"Strategy Name": "' + StrategyFullName + '", '
+            ShortNameText   = '"Short Name": "' + StrategyShortName + '", "LegValues": ['
+            EndText         = ']}"'
+            LegJoinText     = ""
+            for [cntr, Lv] in LegValues
+                if cntr     != array.size(LegValues) - 1
+                    LegJoinText := LegJoinText + '{"LEG": "' + str.upper(Lv) + '"}, '
+                else
+                    LegJoinText := LegJoinText + '{"LEG": "' + str.upper(Lv) + '"}'
+            Output          := InitialText + str.upper(NameText) + str.upper(ShortNameText) + str.upper(LegJoinText) + EndText
+
+
+// [__DayMinus1, __DayMinus3, __DayMinus1W, __TimeMinusforWeekStart, __MonthStartDate, __NextMonthStartDate, ___3MonthStartDate] = TimeReduction(time_close)
+// [__YYYY, __YY, __M, __MM, __MMM, __MMMM, __D, __DD, __DDMMYY_Dot, __DDMMYY_Ifen, __DDMMYY_FSlash, __DDMMMYYYY_Space, __DDMMMYYYY_Ifen] = DateFormatterFx((time_close - __DayMinus1))
+// a60 = label.new(bar_index[0], high, __DDMMMYYYY_Ifen)
+// label.delete(a60[0])
+
+// plot(ta.change(month(time_close)))

@@ -1,0 +1,823 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// Author : @Fontiramisu
+// Pivot Calculation is from ©ZenAndTheArtOfTrading
+// Trend interpretation is from @Fontiramisu
+//@version=5
+
+// @description Provides function's indicators for pivot - trend - resistance.
+library("fontilab") // Public fontilab library
+
+// --------- Util Functions ------------- [
+// @function to get last high/low (handle multiple rsiOver in a row)
+export getHighLowFromNbCandles(bool isLong, int nbCandles) =>
+    highLow = isLong ? low : high
+    for counter = 1 to nbCandles + 10
+        if isLong
+            highLow := low[counter] < highLow ? low[counter] : highLow
+        else
+            highLow := high[counter] > highLow ? high[counter] : highLow
+    highLow
+
+
+// ] -------------- FUNCTIONS : Utility Functions ---------------- [
+
+// --- Manipulation Reusable Functions ---
+// @function Get the last element of an int array.
+export getElIntArrayFromEnd(int[] arrayWanted, int nbLast) =>
+    result = 99
+    if array.size(arrayWanted) >= nbLast + 1
+        result := array.get(arrayWanted, array.size(arrayWanted) - nbLast - 1)
+    result
+
+// @function Get the last element of an float array.
+export getElFloatArrayFromEnd(float[] arrayWanted, int nbLast) =>
+    result = 99.99
+    if array.size(arrayWanted) >= nbLast + 1
+        result := array.get(arrayWanted, array.size(arrayWanted) - nbLast - 1)
+    result
+
+// @function Get the last element of a bool array.
+export getElBoolArrayFromEnd(bool[] arrayWanted, int nbLast) =>
+    var bool result = na
+    if array.size(arrayWanted) >= nbLast + 1
+        result := array.get(arrayWanted, array.size(arrayWanted) - nbLast - 1)
+    result
+
+// ] -------------- FUNCTIONS : Moving Avg ------------------ [
+
+
+// @function Double Exponential Average.
+export dema(float src, simple int length) =>
+    ema1= ta.ema(src, length)
+    ema2 = ta.ema(ema1,length)
+    dema = (2 * ema1) - ema2
+    dema
+
+// @function Tripple exponential moving average.
+export tema(float src, simple int len)=>
+    ema1 = ta.ema(src, len)
+    ema2 = ta.ema(ema1, len)
+    ema3 = ta.ema(ema2, len)
+    tema = 3 * (ema1 - ema2) + ema3
+    tema
+
+// @function calculate Zero Lag SMA.
+export zlSma(float src, simple int len) =>
+    lsma = ta.linreg(src, len, 0)
+    lsma2 = ta.linreg(lsma, len, 0)
+    eq = lsma - lsma2
+    zlsma = lsma + eq
+    zlsma
+
+// @function Zero-lag Dema.
+export zlDema(float src, simple int len) =>
+    zdema1 = ta.ema(src, len)
+    zdema2 = ta.ema(zdema1, len)
+    dema1 = 2 * zdema1 - zdema2
+    zdema12 = ta.ema(dema1, len)
+    zdema22 = ta.ema(zdema12, len)
+    zldema = 2 * zdema12 - zdema22
+    zldema
+
+// @function Zero-lag Tema.
+export zlTema(float src, simple int len) =>
+    ema1 = ta.ema(src, len)
+    ema2 = ta.ema(ema1, len)
+    ema3 = ta.ema(ema2, len)
+    tema1 = 3 * (ema1 - ema2) + ema3
+    ema1a = ta.ema(tema1, len)
+    ema2a = ta.ema(ema1a, len)
+    ema3a = ta.ema(ema2a, len)
+    zltema = 3 * (ema1a - ema2a) + ema3a
+    zltema
+
+// @function McGinley Dynamic
+export mcginley(float src, simple int len)=>
+    mg = 0.0
+    t = ta.ema(src, len)
+    mg := na(mg[1]) ? t : mg[1] + (src - mg[1]) / (len * math.pow(src / mg[1], 4))
+    mg
+
+
+// ] -------------- FUNCTIONS : Assembly Functions ---------------- [
+// @function Select between multiple ma type.
+export multiMa(float source, simple int length, string type) =>
+    switch type
+        "SMA"           => ta.sma(source, length)
+        "EMA"           => ta.ema(source, length)
+        "SMMA (RMA)"    => ta.rma(source, length)
+        "WMA"           => ta.wma(source, length)
+        "VWMA"          => ta.vwma(source, length)
+        "DEMA"          => dema(source, length)
+        "TEMA"          => tema(source, length)
+        "ZLSMA"         => zlSma(source, length)
+        "ZLDEMA"        => zlDema(source, length)
+        "ZLTEMA"        => zlTema(source, length)
+        "McGinley-D"    => mcginley(source, length)
+        "HMA"           => ta.hma(source, length )
+
+
+// ] -------------- FUNCTIONS : Math Functions ---------------- [
+// @function Get source slope.
+export getSlope(float source) =>
+    // STANDARDISE SLOPE
+    // Multiplicator to have interprationnable results
+    multiplicator = 100000
+    // Calculating the PERCENTAGE SLOPE (not the strate slope)
+    // It's the slope of the percentage change from maToSlope to maToSlope[periodFast]
+    // So the slope is based on %
+    dyPer = (source - source[1]) / source
+    // Slope calculate (equal dy%/dx%)
+    slopeMa = dyPer / 1 * multiplicator
+    slopeMa
+
+// @funtion to get MZL.
+export getMZL(float src, simple int lengthFast, simple int lengthSlow) =>
+    // Fast line.
+    demaFast = dema(src, lengthFast)
+    // Slow line.
+    demaSlow = dema(src, lengthSlow)
+    demaFast - demaSlow
+
+// @function to get Dema supertrend.
+export demaSupertrend(simple int lenAtr, simple int lenMas, float mult, float highP, float lowP, float closeP) =>
+    atr           = ta.atr(lenAtr)
+    bandOffset    = mult * atr
+
+    upperBand     = dema(highP + bandOffset, lenMas)
+    lowerBand     = dema(lowP - bandOffset, lenMas)
+
+    prevLowerBand = nz(lowerBand[1])
+    prevUpperBand = nz(upperBand[1])
+
+    lowerBand    := lowerBand > prevLowerBand or closeP[1] < prevLowerBand ? lowerBand : prevLowerBand
+    upperBand    := upperBand < prevUpperBand or closeP[1] > prevUpperBand ? upperBand : prevUpperBand
+    midBand      = (lowerBand + upperBand)/2
+
+    [lowerBand, upperBand, midBand]
+
+// @function get RSI.
+export getRSI(float source, simple int rsiLength, string maType, simple int maLength) =>
+    up = ta.rma(math.max(ta.change(source), 0), rsiLength)
+    down = ta.rma(-math.min(ta.change(source), 0), rsiLength)
+    rsi = down == 0 ? 100 : up == 0 ? 0 : 100 - (100 / (1 + up / down))
+    rsiMA = multiMa(rsi, maLength, maType)
+    [rsi, rsiMA]
+
+// @function get MACD.
+export getMACD(float source, simple int fastLength, simple int slowLength, simple int signalLength, string maType) =>
+    fast_ma = multiMa(source, fastLength, maType)
+    slow_ma = multiMa(source, slowLength, maType)
+    macd = fast_ma - slow_ma
+    signal = multiMa(macd, signalLength, maType)
+    hist = macd - signal
+    [macd, signal, hist]
+
+
+// @function get trend bands.
+export getTrendBands(float src, float delta)=>
+    float upperb    = 0.0
+    float lowerb    = 0.0
+
+    upperb          := nz(upperb[1])
+    lowerb          := nz(lowerb[1])
+
+    if src > nz(upperb[1])
+        upperb := math.max(nz(upperb[1]), math.max(src, nz(src[1])))
+        lowerb := upperb - delta
+        if lowerb < nz(lowerb[1]) or lowerb > nz(lowerb[1]) and upperb == nz(upperb[1])
+            lowerb := nz(lowerb[1])
+    else if src < nz(lowerb[1])
+        lowerb := math.min(nz(lowerb[1]), math.min(src, nz(src[1])))
+        upperb := lowerb + delta
+        if upperb > nz(upperb[1]) or upperb < nz(upperb[1]) and lowerb == nz(lowerb[1])
+            upperb := nz(upperb[1])
+
+    midb = (lowerb + upperb) / 2
+    [midb, upperb, lowerb]
+
+// ] ------- Calculate Pivots ----------- [
+// @function Detecting pivot points (and returning price + bar index.
+// @param src The chart we analyse.
+// @param lenght Used for the calcul.
+// @param isHigh lookging for high if true, low otherwise.
+// @returns The bar index and the price of the pivot.
+export pivots(float src, float length, bool isHigh) =>
+    l2 = length * 2
+    c = nz(src[length])
+    ok = true
+    for i = 0 to l2
+        if isHigh and src[i] > c // If isHigh, validate pivot high
+            ok := false
+        if not isHigh and src[i] < c // If not isHigh, validate pivot low
+            ok := false
+    if ok // If pivot is valid, return bar index + high price value
+        [bar_index[length], c]
+    else // If pivot is invalid, return na
+        [int(na), float(na)]
+
+// @function Calculate deviation threshold for identifying major swings.
+// @param tresholdMultiplier Usefull to equilibrate the calculate.
+// @param closePrice Close price of the chart wanted.
+// @returns The deviation threshold.
+export calcDevThreshold(float tresholdMultiplier, float closePrice) => ta.atr(10) / closePrice * 100 * tresholdMultiplier
+
+// @function Custom function for calculating price deviation for validating large moves.
+// @param basePrice The reference price.
+// @param price The price tested.
+// @returns The deviation.
+export calcDev(float basePrice, float price) => 100 * (price - basePrice) / price
+
+// @function Detecting pivots that meet our deviation criteria.
+// @param dev The deviation wanted.
+// @param isHigh The type of pivot tested (high or low).
+// @param index The Index of the pivot tested.
+// @param price The chart price wanted.
+// @param dev_threshold The deviation treshold.
+// @param isHighLast The type of last pivot.
+// @param pLast The pivot price last.
+// @param iLast Index of the last pivot.
+// @param lineLast The lst line.
+// @returns The Line and bool is pivot High.
+export pivotFoundWithLines(float dev, bool isHigh, int index, float price, float dev_threshold, bool isHighLast, float pLast, int iLast, line lineLast) =>
+    if isHighLast == isHigh // Check bull/bear direction of new pivot
+        // New pivot in same direction as last (a pivot high), so update line upwards (ie. trend-continuation)
+        if isHighLast ? price > pLast : price < pLast // If new pivot is above last pivot, update line
+            if not na(lineLast)
+                line.set_xy2(lineLast, index, price)
+            [lineLast, isHighLast, true]
+        else
+            [line(na), bool(na), false] // New pivot is not above last pivot, so don't update the line
+    else // Reverse the trend/pivot direction (or create the very first line if lineLast is na)
+        if math.abs(dev) > dev_threshold
+            // Price move is significant - create a new line between the pivot points
+            id = line.new(iLast, pLast, index, price, color=color.gray, width=1, style=line.style_dashed)
+            [id, isHigh, true]
+        else
+            [line(na), bool(na), false]
+
+// @function Get pivot that meet our deviation criteria.
+// @param thresholdMultiplier The treshold multiplier.
+// @param depth The depth to calculate pivot.
+// @param lineLast The last line.
+// @param isHighLast The type of last pivot
+// @param iLast Index of the last pivot.
+// @param pLast The pivot price last.
+// @param deleteLines If the line are draw or not.
+// @param closePrice The chart close price.
+// @param highPrice The chart high price.
+// @param lowPrice The chart low price.
+// @returns All pivot the informations.
+export getDeviationPivots(
+             float thresholdMultiplier,
+             float depth,
+             line lineLast,
+             bool isHighLast,
+             int iLast,
+             float pLast,
+             bool deleteLines,
+             float closePrice,
+             float highPrice,
+             float lowPrice
+             ) =>
+    // Vars to return
+    line newLineLast = na
+    bool newIsHighLast = na
+    int newILast = na
+    float newPLast = na
+    int newIPrev = na
+    float newPLastHigh = na
+    float newPLastLow = na
+
+    // Calculate deviation threshold for identifying major swings
+    devThreshold = calcDevThreshold(thresholdMultiplier, closePrice)
+
+    // Get bar index & price high/low for current pivots
+    [iH, pH] = pivots(highPrice, depth / 2, true)
+    [iL, pL] = pivots(lowPrice, depth / 2, false)
+
+    // If bar index for current pivot high is not NA (ie. we have a new pivot):
+    if not na(iH)
+        dev = calcDev(pLast, pH) // Calculate the deviation from last pivot
+        [id, isHigh, isNewPivot] = pivotFoundWithLines(dev, true, iH, pH, devThreshold, isHighLast, pLast, iLast, lineLast) // Pass the current pivot high into pivotFound() for validation & line update
+        if isNewPivot // If the line has been updated, update price & index values and delete previous line
+            if deleteLines and not na(id)
+                line.delete(id)
+            newLineLast     := id
+            newIsHighLast   := isHigh
+            newIPrev        := iLast
+            newILast        := iH
+            newPLast        := pH
+            newPLastHigh    := pH
+    else
+        if not na(iL) // If bar index for current pivot low is not NA (ie. we have a new pivot):
+            dev = calcDev(pLast, pL) // Calculate the deviation from last pivot
+            [id, isHigh, isNewPivot] = pivotFoundWithLines(dev, false, iL, pL, devThreshold, isHighLast, pLast, iLast, lineLast) // Pass the current pivot low into pivotFound() for validation & line update
+            if isNewPivot // If the line has been updated, update price values and delete previous line
+                if deleteLines and not na(id)
+                    line.delete(id)
+                newLineLast     := id
+                newIsHighLast   := isHigh
+                newIPrev        := iLast
+                newILast        := iL
+                newPLast        := pL
+                newPLastLow     := pL
+
+    // return
+    [newLineLast, newIsHighLast, newIPrev, newILast, newPLast, newPLastHigh, newPLastLow]
+
+
+// ]-------- Trend From Pivots----------- [
+
+// @function Check if last price is between bounds array.
+// @param isTrendUp Is actual trend up.
+// @param arrayBounds The trend array.
+// @param lastPrice The pivot Price that just be found.
+// @param precision The percent we add to actual bounds to validate a move.
+// @returns na if price is between bounds, true if continuation, false if not.
+export isTrendContinuation(bool isTrendUp, float[] arrayBounds, float lastPrice, float precision) =>
+    bool isContinuation = na // if true price is following the trend, if not trend is reversed, if na price is between bounds
+    if not na(arrayBounds)
+        // Helping vars
+        lastElementArrayBounds = array.get(arrayBounds, array.size(arrayBounds) - 1)
+        scdLastElementArrayBounds = array.get(arrayBounds, array.size(arrayBounds) - 2)
+
+        if isTrendUp and lastPrice > lastElementArrayBounds * (1 + precision) // continuation trend
+         or not isTrendUp and lastPrice < lastElementArrayBounds - lastElementArrayBounds * precision
+            isContinuation := true
+        else if isTrendUp and lastPrice < scdLastElementArrayBounds - lastElementArrayBounds * precision// reverse the trend
+         or not isTrendUp and lastPrice > scdLastElementArrayBounds * (1 + precision)
+            isContinuation := false
+    // RETURN
+    isContinuation
+
+
+// --- Helping variables and functions ---
+// - Helping "situationnal" Functions -
+isThreeArraysEmpty(array1, array2, array3) =>
+    if array.size(array1) == 0 and array.size(array2) == 0 and array.size(array3) == 0
+        true
+    else
+        false
+
+// Custom function tu push easely in arrays
+pushThreeArrays(array1, array2, array3, el1, el2, el3) =>
+    array.push(array1, el1)
+    array.push(array2, el2)
+    array.push(array3, el3)
+
+// Add and remove
+replaceLastElThreeArrays(array1, array2, array3, el1, el2, el3) =>
+    array.pop(array1) // removes the last element
+    array.push(array1, el1) // add new
+    array.pop(array2) // removes the last element
+    array.push(array2, el2) // add new
+    array.pop(array3) // removes the last element
+    array.push(array3, el3) // add new
+
+clearThreeArrays(array1, array2, array3) =>
+    array.clear(array1)
+    array.clear(array2)
+    array.clear(array3)
+
+// Keep only nb last element from an array
+keepLastNbElArray(array1, nbToKeep) =>
+    for counter = 1 to array.size(array1) - nbToKeep
+        array.shift(array1)
+
+// Keep only nb last el for 3 array
+keepLastNbElThreeArray(array1, array2, array3, nbToKeep) =>
+    for counter = 1 to array.size(array1) - nbToKeep
+        array.shift(array1)
+        array.shift(array2)
+        array.shift(array3)
+
+
+// @function Function to update array and trend related to pivot trend interpretation.
+// @param trendBarIndexes The array trend bar index.
+// @param trendPrices The array trend price.
+// @param trendPricesIsHigh The array trend is high.
+// @param interBarIndexes The array inter bar index.
+// @param interPrices The array inter price.
+// @param interPricesIsHigh The array inter ishigh.
+// @param isTrendHesitate The actual status of is trend hesitate.
+// @param isTrendUp The actual status of is trend up.
+// @param trendPrecision The var precision to add in "iscontinuation" function.
+// @param pLast The last pivot price.
+// @param iLast The last pivot bar index.
+// @param isHighLast The last pivot "isHigh".
+// @returns trend & inter arrays, is trend hesitate, is trend up.
+export getTrendPivots(
+         int[] trendBarIndexes,
+         float[] trendPrices,
+         bool[] trendPricesIsHigh,
+         int[] interBarIndexes,
+         float[] interPrices,
+         bool[] interPricesIsHigh,
+         bool isTrendHesitate,
+         bool isTrendUp,
+         float trendPrecision,
+         float pLast,
+         int iLast,
+         bool isHighLast
+         ) =>
+    // Vars to be returned
+    trendBarIndexesNew = trendBarIndexes
+    trendPricesNew = trendPrices
+    trendPricesNewIsHigh = trendPricesIsHigh
+    interBarIndexesNew = interBarIndexes
+    interPricesNew = interPrices
+    interPricesNewIsHigh = interPricesIsHigh
+    isTrendHesitateNew = isTrendHesitate
+    isTrendUpNew = isTrendUp
+
+    // Helping "situationnal" vars
+    isEmptyTrendArrays = isThreeArraysEmpty(trendBarIndexesNew, trendPricesNew, trendPricesNewIsHigh)
+    // Last trend arrays elements
+    lastTrendBarIndex = getElIntArrayFromEnd(trendBarIndexesNew, 0)
+    lastTrendPriceIsHigh = getElBoolArrayFromEnd(trendPricesNewIsHigh, 0)
+    lastTrendPrice = getElFloatArrayFromEnd(trendPricesNew, 0)
+
+
+    // --- Start Algo --- [
+    // Init/handle the first trend
+    if pLast != 0 and lastTrendPrice != pLast
+        if array.size(trendPricesNew) < 3 // Init array trendPricesNew
+
+            if not isEmptyTrendArrays and lastTrendPriceIsHigh == isHighLast // If new pivot is low/high again then we must update array
+                replaceLastElThreeArrays(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, iLast, pLast, isHighLast)
+            else
+                pushThreeArrays(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, iLast, pLast, isHighLast)
+
+        else if array.size(trendPricesNew) >= 3// All cases
+            // ### CONDITION ### : /!\/!\/!\ last Pivot added is not validated until next pivot validate the tendancy /!\/!\/!\
+            isContinuation = isTrendContinuation(isTrendUpNew, trendPricesNew, pLast, trendPrecision)
+            if na(isContinuation) // if new price is between bounds
+                // if pivot is potential bound then we have to push it in inter - arrayTrend is only validated pivots
+                if array.size(interPricesNew) == 0 // Not hesitate trend but potential bound
+                    if getElBoolArrayFromEnd(trendPricesNewIsHigh, 0) != isHighLast // exclude case where price make new "hesitation" bound
+                        pushThreeArrays(interBarIndexesNew, interPricesNew, interPricesNewIsHigh, iLast, pLast, isHighLast)
+                else if getElBoolArrayFromEnd(interPricesNewIsHigh, 0) == isHighLast // inter pivot that did same "isHigh" must be replaced
+                    replaceLastElThreeArrays(interBarIndexesNew, interPricesNew, interPricesNewIsHigh, iLast, pLast, isHighLast)
+                else
+                    pushThreeArrays(interBarIndexesNew, interPricesNew, interPricesNewIsHigh, iLast, pLast, isHighLast)
+
+                // Update trend hesitate
+                if array.size(interPricesNew) <= 1 // We push the first pivot after new high/low but it is not hesitate trend
+                    isTrendHesitateNew := false
+                else
+                    isTrendHesitateNew := true
+
+            else if array.size(interPricesNew) == 0 and isHighLast == getElBoolArrayFromEnd(trendPricesNewIsHigh, 0) // case where bound extend without doing interArray
+                replaceLastElThreeArrays(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, iLast, pLast, isHighLast)
+
+            else if not isContinuation // 1. Test the trend : Trend reverse
+                isTrendHesitateNew := false
+                // isTrendUpNew := isHighLast
+                // Trend is reversed so trendArrays must be updated
+                if array.size(interPricesNew) > 0 // 2. Test if inter pivot
+                    if isHighLast != getElBoolArrayFromEnd(interPricesNewIsHigh, 0) // 3. Test "same high" case : When continuation interArray size is minimum 1 (if everything work)
+                        // Add the last trendArray element + last 2 interArray element + the last price
+                        keepLastNbElThreeArray(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, 1)
+                        pushThreeArrays(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, getElIntArrayFromEnd(interBarIndexesNew, 1), getElFloatArrayFromEnd(interPricesNew, 1), getElBoolArrayFromEnd(interPricesNewIsHigh, 1))
+                        pushThreeArrays(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, getElIntArrayFromEnd(interBarIndexesNew, 0), getElFloatArrayFromEnd(interPricesNew, 0), getElBoolArrayFromEnd(interPricesNewIsHigh, 0))
+                        pushThreeArrays(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, iLast, pLast, isHighLast)
+                    else // case where last pivot was interArray and also the "same ishigh"
+                        // Add the last 2 trendArray element + Add the last price
+                        keepLastNbElThreeArray(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, 2)
+                        pushThreeArrays(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, iLast, pLast, isHighLast)
+                    // clear inter array
+                    clearThreeArrays(interBarIndexesNew,interPricesNew, interPricesNewIsHigh)
+                else // 2. case where pivot
+                    pushThreeArrays(trendBarIndexesNew,trendPricesNew, trendPricesNewIsHigh, iLast, pLast, isHighLast)
+
+            else // 1. Test the trend : It is a continuation
+                isTrendHesitateNew := false
+                // isTrendUpNew := isHighLast
+                // We must update trendArrays
+                if array.size(interPricesNew) > 0 // 2. Test if inter pivot
+                    if isHighLast != getElBoolArrayFromEnd(interPricesNewIsHigh, 0) // 3. Test "same high" case : When continuation, interArray size is minimum 1 (if everything work)
+                        // Add all existing trendArray + last interArray element + last element
+                        pushThreeArrays(trendBarIndexes,trendPricesNew, trendPricesNewIsHigh, getElIntArrayFromEnd(interBarIndexesNew, 0), getElFloatArrayFromEnd(interPricesNew, 0), getElBoolArrayFromEnd(interPricesNewIsHigh, 0))
+                        pushThreeArrays(trendBarIndexes,trendPricesNew, trendPricesNewIsHigh, iLast, pLast, isHighLast)
+                    else
+                        // Case treated at the root : see "if na(isContinuation)""
+                        // Case where price make new bound in same direction but is less than "precision%"" out of last bound
+                        // This pivot is put in inter array, we have to treat this case
+                        // if array.size(interPricesNew) == 1
+                        //     keepLastNbElThreeArray(trendBarIndexes,trendPricesNew, trendPricesNewIsHigh, 2)
+                        //     pushThreeArrays(trendBarIndexes,trendPricesNew, trendPricesNewIsHigh, iLast, pLast, isHighLast)
+
+                        // Not totaly true, see above : When continuation, interArray size is mini 1, if highLast and interHighLast is the same it means that interArraySize is mini 2
+                        // ex : upTrend - up/  up\  up/  inter\  inter/  continuation/  ==> 2 inter/\ minimum to be same "high"
+                        // Add all trendArray + Add the last 2nd last element from inter + Last Price
+                        pushThreeArrays(trendBarIndexes,trendPricesNew, trendPricesNewIsHigh, getElIntArrayFromEnd(interBarIndexesNew, 1), getElFloatArrayFromEnd(interPricesNew, 1), getElBoolArrayFromEnd(interPricesNewIsHigh, 1))
+                        pushThreeArrays(trendBarIndexes,trendPricesNew, trendPricesNewIsHigh, iLast, pLast, isHighLast)
+
+                    // clear inter array
+                    clearThreeArrays(interBarIndexesNew,interPricesNew, interPricesNewIsHigh)
+             // else : there is always an inter array price before continuation (cf case "if na(continuation)", this case is not possible
+                    // Case new extend bound in continuation is treated (cf case "else if array.size(interPricesNew) == 0 and isHighLast == getElArrayFromEnd(interPricesIsHigh, 0)")
+
+            // Update trend
+            isTrendUpNew := getElBoolArrayFromEnd(trendPricesIsHigh, 0)
+
+
+    //] RETURN
+    [trendBarIndexesNew, trendPricesNew, trendPricesNewIsHigh, interBarIndexesNew, interPricesNew, interPricesNewIsHigh, isTrendHesitateNew, isTrendUpNew]
+
+
+
+// ] ------- Do Some Drawings------------ [
+
+// @function Draw bounds and breaking line of the trend.
+// @param startIndex Index of the first bound line.
+// @param startPrice Price of first bound line.
+// @param endIndex Index of second bound line.
+// @param endPrice price of second bound line.
+// @param breakingPivotIndex The breaking line index.
+// @param breakingPivotPrice The breaking line price.
+// @param isTrendUp The actual status of the trend.
+// @returns The lines bounds and breaking line.
+export drawBoundLines(
+         int startIndex,
+         float startPrice,
+         int endIndex,
+         float endPrice,
+         int breakingPivotIndex,
+         float breakingPivotPrice,
+         bool isTrendUp,
+         color breakingLineColor
+         ) =>
+
+    // Var
+    firstBoundColor     = isTrendUp ? color.red : color.green
+    scdBoundColor       = isTrendUp ? color.green : color.red
+
+    firstLineDup        = line.new(startIndex, startPrice, endIndex, startPrice, extend=extend.right, color=firstBoundColor)
+    scdLineDup          = line.new(endIndex, endPrice, endIndex + 1, endPrice, extend=extend.right, color=scdBoundColor)
+    breakingLineDup     = line.new(breakingPivotIndex, breakingPivotPrice, endIndex, breakingPivotPrice, extend=extend.right, color=breakingLineColor)
+
+    // Remove old
+    line.delete(firstLineDup[1])
+    line.delete(scdLineDup[1])
+    line.delete(breakingLineDup[1])
+
+    // Return
+    [firstLineDup, scdLineDup, breakingLineDup]
+
+
+
+// ] ------- Pivot Resistance Algo ------ [
+
+// @function Function to update array and related to resistance interpretation.
+// @param resPrices Array that save resis prices.
+// @param resBarIndexes Array that save resis bar index.
+// @param resWeights Array that save resis weight (how much time a pivot got into a resis).
+// @param resNbLows Array that save nb low pivot in resis.
+// @param resNbHighs Array that save nb high pivot in resis.
+// @param maxResis Max number of resis in resis arrays.
+// @param rangePercentResis Percentage vertical range to be taken when finding res.
+// @param pLast The last pivot price.
+// @param iLast The last pivot bar index.
+// @param isHighLast The last pivot "isHigh".
+// @returns trend & inter arrays, is trend hesitate, is trend up.
+export getResistances(
+         float[] resPrices,
+         int[] resBarIndexes,
+         int[] resWeights,
+         int[] resNbLows,
+         int[] resNbHighs,
+         int maxResis,
+         float rangePercentResis,
+         float pLast,
+         int iLast,
+         bool isHighLast
+         ) =>
+
+    float[] newResPrices    = resPrices
+    int[] newResBarIndexes  = resBarIndexes
+    int[] newResWeights     = resWeights
+    int[] newResNbLows      = resNbLows
+    int[] newResNbHighs     = resNbHighs
+
+    // Init calculate vars
+    isStackedResFound       = false
+    float newResPrice       = pLast
+    int newResWeight        = 0
+    int newResBarIndex      = na
+    int newResNbHigh        = 0
+    int newResNbLow         = 0
+    int[] indexesToRemove   = array.new<int>(0,0)
+
+    // Helping vars
+    sizeNewResPrices = array.size(newResPrices)
+    if sizeNewResPrices > 0
+        // Testing if pLast constitute an older resistance
+        for i = 0 to sizeNewResPrices - 1
+            // Update Bar Index to avoid max_bar_back errors :
+            array.set(newResBarIndexes, i, iLast)
+
+            // Find new res :
+            // Helping vars
+            resPrice = array.get(newResPrices, i)
+            resisRangeValid = resPrice * rangePercentResis/2
+            if resPrice + resisRangeValid > pLast and pLast > resPrice - resisRangeValid
+                // Helping vars
+                resNbhigh       = array.get(newResNbHighs, i)
+                resNbLow        = array.get(newResNbLows, i)
+                resWeight       = array.get(newResWeights, i)
+
+                // Careful : cases where pivot res found is not the first time.
+                newResPrice     := newResPrice > 500 ? math.round((newResPrice + resPrice) / 2) : ((newResPrice + resPrice) / 2)
+                newResWeight    := not isStackedResFound ? newResWeight + resWeight + 1 : newResWeight + resWeight // newResWeight is added -> case pLast is near multiple pivot point.
+                newResBarIndex  := iLast //array.get(newResBarIndexes, i) // More weighted res = further bar index on chart.
+                newResNbHigh    := isHighLast and not isStackedResFound ? newResNbHigh + 1 + resNbhigh : newResNbHigh + resNbhigh
+                newResNbLow     := not isHighLast and not isStackedResFound ? newResNbLow + 1 + resNbLow : newResNbLow + resNbLow
+
+                // push index to index to remove arrays
+                array.push(indexesToRemove, i)
+                // mini one res found
+                isStackedResFound := true
+
+        // Update new res arrays with updated values
+        if isStackedResFound
+            // first remove old arrays.
+            sizeIndexesToRemove = array.size(indexesToRemove)
+            if sizeIndexesToRemove > 0
+                // Sort array to dsc to remove easier.
+                array.sort(indexesToRemove, order.descending)
+                for i = 0 to sizeIndexesToRemove - 1
+                    indexToRemove = array.get(indexesToRemove, i)
+                    // Remove old ref of this res
+                    array.remove(newResPrices, indexToRemove)
+                    array.remove(newResWeights, indexToRemove)
+                    array.remove(newResBarIndexes, indexToRemove)
+                    array.remove(newResNbHighs, indexToRemove)
+                    array.remove(newResNbLows, indexToRemove)
+            // Then push new one.
+            array.push(newResPrices, newResPrice) // New res price is the average of both
+            array.push(newResWeights, newResWeight)
+            array.push(newResBarIndexes, newResBarIndex)
+            array.push(newResNbHighs, newResNbHigh)
+            array.push(newResNbLows, newResNbLow)
+
+    // Case pLast do not constitute resistance from res before, then it's a new one
+    if not isStackedResFound
+        array.push(newResPrices, pLast)
+        array.push(newResWeights, 1)
+        array.push(newResBarIndexes, iLast)
+        array.push(newResNbLows, isHighLast ? 1 : 0)
+        array.push(newResNbHighs, isHighLast ? 0 : 1)
+        // Case where maximum resis is obtained : we shift arrays
+        if sizeNewResPrices > maxResis
+            array.shift(newResPrices)
+            array.shift(newResWeights)
+            array.shift(newResBarIndexes)
+            array.shift(newResNbLows)
+            array.shift(newResNbHighs)
+
+    [newResPrices, newResWeights, newResBarIndexes, newResNbLows, newResNbHighs]
+
+
+// @function Get top weighted resistance from multiple res found.
+// @param nbShowRes Nb res we want to return .
+// @param minTopWeight Minimum res weight we want to return.
+// @param resWeights Res weight array.
+// @param resPrices Res prices array.
+// @param resBarIndexes Res bar index array.
+// @return The top arrays.
+export getTopRes(int nbShowRes, int minTopWeight, int[] resWeights, float[] resPrices, int[] resBarIndexes) =>
+    float[] topResPrices    = array.new_float(1, 0)
+    int[] topBarIndexes     = array.new_int(1, 0)
+    int[] topResWeights     = array.new_int(1, 0)
+
+    sizeRes = array.size(resWeights)
+    // int j = 0
+    for j = 0 to sizeRes - 1
+        // Push every el above the first el
+        curWeightRes = array.get(resWeights, j)
+        curPriceRes = array.get(resPrices, j)
+        curBarIndexRes = array.get(resBarIndexes, j)
+        sizeTopRes = array.size(topResWeights)
+        if sizeTopRes < nbShowRes and curWeightRes > minTopWeight // Condition nbShowRes Condition and MinWeight wanted.
+            array.push(topResPrices, curPriceRes)
+            array.push(topResWeights, curWeightRes)
+            array.push(topBarIndexes, curBarIndexRes)
+        else
+            // int k = 0
+            for  k = 0 to sizeTopRes - 1
+                curTopResPrice = array.get(topResPrices, k)
+                curTopResWeight = array.get(topResWeights, k)
+                if curWeightRes > curTopResWeight
+                    array.remove(topResPrices, k)
+                    array.remove(topBarIndexes, k)
+                    array.remove(topResWeights, k)
+                    array.push(topResPrices, curPriceRes)
+                    array.push(topResWeights, curWeightRes)
+                    array.push(topBarIndexes, curBarIndexRes)
+                break
+
+    [topResPrices, topResWeights, topBarIndexes]
+
+// @function Draw resistance lines for resistance indicator.
+// @param resPrices Array of res prices.
+// @param resIndexes Array of res bar indexes.
+export drawResLines(float[] resPrices, int[] resBarIndexes) =>
+    int lineNo = 0
+    while lineNo < array.size(line.all)
+        line.delete(array.get(line.all, lineNo))
+
+    // Then draw them all.
+    for i = 0 to array.size(resPrices) - 1
+        startIndex = array.get(resBarIndexes, i)
+        startPrice = array.get(resPrices, i)
+        endIndex = array.get(resBarIndexes, i) + 1
+        lineResi = line.new(startIndex, startPrice, endIndex, startPrice, extend=extend.both, color=color.purple)
+
+
+// ] ------- DIVERGENCE ----------------- [
+
+_inRange(cond, barOffset, rangeLower, rangeUpper) =>
+    bars = ta.barssince(cond)
+    rangeLower <= bars + barOffset and bars + barOffset <= rangeUpper
+
+
+// @function Plot divergences.
+//
+export plotDivergences(
+     float osc,
+     int lbR,
+     bool plFound,
+     bool phFound,
+     bool plFoundPot,
+     bool phFoundPot,
+     int rangeLower,
+     int rangeUpper
+     ) =>
+
+    //------------------------------------------------------------------------------
+    // Regular Bullish
+    // Osc: Higher Low
+    oscHL = osc[lbR] > ta.valuewhen(plFound, osc[lbR], 1) and _inRange(plFound[1], 0, rangeLower, rangeUpper)
+    oscHLPot = osc[1] > ta.valuewhen(plFound, osc[lbR], 0) and _inRange(plFound[0], 4, rangeLower, rangeUpper)
+
+    // Price: Lower Low
+    priceLL = low[lbR] < ta.valuewhen(plFound, low[lbR], 1)
+    priceLLPot = low[1] < ta.valuewhen(plFound, low[lbR], 0)
+
+    bullCond = priceLL and oscHL and plFound
+    bullCondPot = priceLLPot and oscHLPot and plFoundPot
+
+    //------------------------------------------------------------------------------
+    // Hidden Bullish
+    // Osc: Lower Low
+    oscLL = osc[lbR] < ta.valuewhen(plFound, osc[lbR], 1) and _inRange(plFound[1], 0, rangeLower, rangeUpper)
+    oscLLPot = osc[1] < ta.valuewhen(plFound, osc[lbR], 0) and _inRange(plFound[0], 4, rangeLower, rangeUpper)
+
+    // Price: Higher Low
+    priceHL = low[lbR] > ta.valuewhen(plFound, low[lbR], 1)
+    priceHLPot = low[1] > ta.valuewhen(plFound, low[lbR], 0)
+
+    hiddenBullCond = priceHL and oscLL and plFound
+    hiddenBullCondPot = priceHLPot and oscLLPot and plFoundPot
+
+    //------------------------------------------------------------------------------
+    // Regular Bearish
+    // Osc: Lower High
+    oscLH = osc[lbR] < ta.valuewhen(phFound, osc[lbR], 1) and _inRange(phFound[1], 0, rangeLower, rangeUpper)
+    oscLHPot = osc[1] < ta.valuewhen(phFound, osc[lbR], 0) and _inRange(phFound[0], 4, rangeLower, rangeUpper)
+
+    // Price: Higher High
+    priceHH = high[lbR] > ta.valuewhen(phFound, high[lbR], 1)
+    priceHHPot = high[1] > ta.valuewhen(phFound, high[lbR], 0)
+
+    bearCond = priceHH and oscLH and phFound
+    bearCondPot = priceHHPot and oscLHPot and phFoundPot
+
+    //------------------------------------------------------------------------------
+    // Hidden Bearish
+    // Osc: Higher High
+    oscHH = osc[lbR] > ta.valuewhen(phFound, osc[lbR], 1) and _inRange(phFound[1], 0, rangeLower, rangeUpper)
+    oscHHPot = osc[1] > ta.valuewhen(phFound, osc[lbR], 0) and _inRange(phFound[0], 4, rangeLower, rangeUpper)
+
+    // Price: Lower High
+    priceLH = high[lbR] < ta.valuewhen(phFound, high[lbR], 1)
+    priceLHPot = high[1] < ta.valuewhen(phFound, high[lbR], 0)
+
+    hiddenBearCond = priceLH and oscHH and phFound
+    hiddenBearCondPot = priceLHPot and oscHHPot and phFoundPot
+
+    [bullCond, bullCondPot, hiddenBullCond, hiddenBullCondPot, bearCond, bearCondPot, hiddenBearCond, hiddenBearCondPot]
+
+
+// @function Used to get pivots and potential pivots.
+export getOscPivots(float osc, int lbL, int lbR) =>
+    // Confirmed Pivot.
+    plFound = na(ta.pivotlow(osc, lbL, lbR)) ? false : true
+    phFound = na(ta.pivothigh(osc, lbL, lbR)) ? false : true
+    // Non Confirmed Pivot.
+    plFoundPot = na(ta.pivotlow(osc, 1, 1)) ? false : true
+    phFoundPot = na(ta.pivothigh(osc, 1, 1)) ? false : true
+    [plFound, phFound, plFoundPot, phFoundPot]
+// ]

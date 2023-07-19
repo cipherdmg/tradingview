@@ -1,0 +1,118 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ArcticWolfTrading
+
+//@version=5
+indicator("SPY Test", overlay = false)
+
+linreg=input.int(10,title='Lin Reg', minval=-10, maxval=10, defval=0)
+// Weighted Histo Calculations and plots
+spy1Weight = input(6.59, title='Spy 1 Weight')
+spy2Weight = input(6.02, title='Spy 2 Weight')
+spy3Weight = input(2.91, title='Spy 3 Weight')
+spy4Weight = input(2.05, title='Spy 4 Weight')
+spy5Weight = input(1.89, title='Spy 5 Weight')
+spy6Weight = input(1.77, title='Spy 6 Weight')
+spy7Weight = input(1.55, title='Spy 7 Weight')
+spy8Weight = input(1.51, title='Spy 8 Weight')
+spy9Weight = input(1.46, title='Spy 9 Weight')
+spy10Weight = input(1.19, title='Spy 10 Weight')
+ospyOne = request.security('AAPL', timeframe.period, open)
+ospyTwo = request.security('MSFT', timeframe.period, open)
+ospyThree = request.security('GOOGL', timeframe.period, open)
+ospyFour = request.security('GOOG', timeframe.period, open)
+ospyFive = request.security('TSLA', timeframe.period, open)
+ospySix = request.security('NVDA', timeframe.period, open)
+ospySeven = request.security('JNJ', timeframe.period, open)
+ospyEight = request.security('UNH', timeframe.period, open)
+ospyNine = request.security('BRK.B', timeframe.period, open)
+ospyTen = request.security('AMZN', timeframe.period, open)
+oSPY = request.security('SPY', timeframe.period, open)
+cspyOne = request.security('AAPL', timeframe.period, close)
+cspyTwo = request.security('MSFT', timeframe.period, close)
+cspyThree = request.security('GOOGL', timeframe.period, close)
+cspyFour = request.security('GOOG', timeframe.period, close)
+cspyFive = request.security('TSLA', timeframe.period, close)
+cspySix = request.security('NVDA', timeframe.period, close)
+cspySeven = request.security('JNJ', timeframe.period, close)
+cspyEight = request.security('UNH', timeframe.period, close)
+cspyNine = request.security('BRK.B', timeframe.period, close)
+cspyTen = request.security('AMZN', timeframe.period, close)
+cSPY = request.security('SPY', timeframe.period, close)
+spy1Percent = ((cspyOne - ospyOne)/cspyOne)
+spy2Percent = ((cspyTwo - ospyTwo)/cspyTwo)
+spy3Percent = ((cspyThree - ospyThree)/cspyThree)
+spy4Percent = ((cspyFour - ospyFour)/cspyFour)
+spy5Percent = ((cspyFive - ospyFive)/cspyFive)
+spy6Percent = ((cspySix - ospySix)/cspySix)
+spy7Percent = ((cspySeven - ospySeven)/cspySeven)
+spy8Percent = ((cspyEight - ospyEight)/cspyEight)
+spy9Percent = ((cspyNine - ospyNine)/cspyNine)
+spy10Percent = ((cspyTen - ospyTen)/cspyTen)
+spy1Sizing = spy1Percent * spy1Weight
+spy2Sizing = spy2Percent * spy2Weight
+spy3Sizing = spy3Percent * spy3Weight
+spy4Sizing = spy4Percent * spy4Weight
+spy5Sizing = spy5Percent * spy5Weight
+spy6Sizing = spy6Percent * spy6Weight
+spy7Sizing = spy7Percent * spy7Weight
+spy8Sizing = spy8Percent * spy8Weight
+spy9Sizing = spy9Percent * spy9Weight
+spy10Sizing = spy10Percent * spy10Weight
+weightedHisto = ta.linreg(1000*(spy1Sizing + spy1Sizing + spy2Sizing + spy3Sizing + spy4Sizing + spy5Sizing + spy6Sizing + spy7Sizing + spy8Sizing + spy9Sizing + spy10Sizing),linreg,0)
+plot(weightedHisto, style=plot.style_histogram, linewidth=2, color=color.new(color.orange, 0))
+// Unweighted Line calculations and plots
+spy1Weight2 = input(5, title='Spy 1 Weight')
+spy2Weight2 = input(5, title='Spy 2 Weight')
+spy3Weight2 = input(5, title='Spy 3 Weight')
+spy4Weight2 = input(5, title='Spy 4 Weight')
+spy5Weight2 = input(5, title='Spy 5 Weight')
+spy6Weight2 = input(5, title='Spy 6 Weight')
+spy7Weight2 = input(5, title='Spy 7 Weight')
+spy8Weight2 = input(5, title='Spy 8 Weight')
+spy9Weight2 = input(5, title='Spy 9 Weight')
+spy10Weight2 = input(5, title='Spy 10 Weight')
+ospyOne2 = request.security('AAPL', timeframe.period, open)
+ospyTwo2 = request.security('MSFT', timeframe.period, open)
+ospyThree2 = request.security('GOOGL', timeframe.period, open)
+ospyFour2 = request.security('GOOG', timeframe.period, open)
+ospyFive2 = request.security('TSLA', timeframe.period, open)
+ospySix2 = request.security('NVDA', timeframe.period, open)
+ospySeven2 = request.security('JNJ', timeframe.period, open)
+ospyEight2 = request.security('UNH', timeframe.period, open)
+ospyNine2 = request.security('BRK.B', timeframe.period, open)
+ospyTen2 = request.security('AMZN', timeframe.period, open)
+oSPY2 = request.security('SPY', timeframe.period, open)
+cspyOne2 = request.security('AAPL', timeframe.period, close)
+cspyTwo2 = request.security('MSFT', timeframe.period, close)
+cspyThree2 = request.security('GOOGL', timeframe.period, close)
+cspyFour2 = request.security('GOOG', timeframe.period, close)
+cspyFive2 = request.security('TSLA', timeframe.period, close)
+cspySix2 = request.security('NVDA', timeframe.period, close)
+cspySeven2 = request.security('JNJ', timeframe.period, close)
+cspyEight2 = request.security('UNH', timeframe.period, close)
+cspyNine2 = request.security('BRK.B', timeframe.period, close)
+cspyTen2 = request.security('AMZN', timeframe.period, close)
+cSPY2 = request.security('SPY', timeframe.period, close)
+spy1Percent2 = ((cspyOne2 - ospyOne2)/cspyOne2)
+spy2Percent2 = ((cspyTwo2 - ospyTwo2)/cspyTwo2)
+spy3Percent2 = ((cspyThree2 - ospyThree2)/cspyThree2)
+spy4Percent2 = ((cspyFour2 - ospyFour2)/cspyFour2)
+spy5Percent2 = ((cspyFive2 - ospyFive2)/cspyFive2)
+spy6Percent2 = ((cspySix2 - ospySix2)/cspySix2)
+spy7Percent2 = ((cspySeven2 - ospySeven2)/cspySeven2)
+spy8Percent2 = ((cspyEight2 - ospyEight2)/cspyEight2)
+spy9Percent2 = ((cspyNine2 - ospyNine2)/cspyNine2)
+spy10Percent2 = ((cspyTen2 - ospyTen2)/cspyTen2)
+spy1Sizing2 = spy1Percent2 * spy1Weight2
+spy2Sizing2 = spy2Percent2 * spy2Weight2
+spy3Sizing2 = spy3Percent2 * spy3Weight2
+spy4Sizing2 = spy4Percent2 * spy4Weight2
+spy5Sizing2 = spy5Percent2 * spy5Weight2
+spy6Sizing2 = spy6Percent2 * spy6Weight2
+spy7Sizing2 = spy7Percent2 * spy7Weight2
+spy8Sizing2 = spy8Percent2 * spy8Weight2
+spy9Sizing2 = spy9Percent2 * spy9Weight2
+spy10Sizing2 = spy10Percent2 * spy10Weight2
+unweightedline = ta.linreg(1000*(spy1Sizing2 + spy1Sizing2 + spy2Sizing2 + spy3Sizing2 + spy4Sizing2 + spy5Sizing2 + spy6Sizing2 + spy7Sizing2 + spy8Sizing2 + spy9Sizing2 + spy10Sizing2),linreg,0)
+plot(unweightedline)
+hline(0, "O Line", color=color.new(#FFFFFF, 0))

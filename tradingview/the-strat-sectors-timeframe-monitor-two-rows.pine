@@ -1,0 +1,130 @@
+//@version=5
+
+// ||###################################################################################||
+// ||                                                                                   ||
+// || Cipher DMG                                                                        ||
+// || This indicator displays all of the major sectors in 2 rows within the selected    ||
+// || selected timeframe.                                                               ||
+// ||                                                                                   ||
+// || NOTE  Usually this is put on the VIX in my Watchlist                              ||
+// ||###################################################################################||
+
+indicator(title="The Strat Sectors Timeframe Monitor Two Rows", shorttitle="The Strat Sectors Timeframe Monitor Two Rows", max_labels_count = 500, overlay=true)
+
+bullishColor = input.color(color.new(color.green, 0), title='Bullish Color', group="Time Frame Continuation Colors")
+bullishTextColor = input.color(color.new(color.green, 0), title='Bullish Text Color', group='Time Frame Continuation Colors')
+
+bearishColor = input.color(color.new(color.red, 0), title='Bearish Color', group="Time Frame Continuation Colors")
+bearishTextColor = input.color(color.new(color.red, 0), title='Bearish Text Color', group='Time Frame Continuation Colors')
+
+tfTableOpacity = input.int(80, title='Multi time frame table opacity', group="Time Frame Continuation Colors")
+emptyTopTableRow = input.bool(true, title='Insert a blank table row at the top to gain more space', group='Time Frame Continuation')
+
+//##################################################################################################
+//Candle Type
+//##################################################################################################
+getCandleType(_high, _high1, _low, _low1) =>
+    candleType = 0
+
+    //Higher High and Lower Low
+    if _high > _high1 and _low < _low1
+        candleType := 3
+        candleType
+
+    else if _high <= _high1 and _low >= _low1
+        //Lower High and Higher Low
+        if _high <= _high1 and _low >= _low1
+            candleType := 1
+            candleType
+        else
+            candleType := 2
+            candleType
+    candleType
+
+
+
+// @function Entire Candle wick to wick is inside the previous candle.  This is considered a Scenario 1.
+// It means its consolidation on a smaller timeframe  We do not want to trade things on a 1 because it has Not picked its direction.
+// @param idx index to use
+// @returns
+isInsideCandle(int idx) =>
+    high[idx] <= high[idx + 1] and low[idx] >= low[idx + 1]
+
+//@function Candle engulfs the previous candle and is typically the larges bar.  This is considered a Scenario 3
+//Most commonly 3s occur after 1
+//@return
+isOutsideCandle(int idx) =>
+    high[idx] > high[idx + 1] and low[idx] < low[idx + 1]
+
+
+//getPercentChange
+getPercentChange(openPrice,closePrice) =>
+
+    //The Percent Change will be the closePrice - openPrice / (max (openPrice, closePrice))
+    percentChange = ((closePrice - openPrice) / (math.max(openPrice,closePrice)) ) * 100.0
+    resultColor = openPrice >= closePrice ? bearishColor : bullishColor
+    resultTextColor = openPrice >= closePrice ? bearishTextColor : bullishTextColor
+    [percentChange,resultTextColor,resultColor]
+
+// FULL TIME FRAME CONTINUITY CODE:
+//reusable function for getting detail on the security
+getSecurityByTimeFrame(symbol,timeFrame) =>
+    [openValue, closeValue, highValue, lowValue, timeValue] = request.security(symbol = symbol, timeframe = timeFrame, expression = [open, close, high, low, time], gaps = barmerge.gaps_off)
+
+    [percentChange,resultTextColor, resultColor] = getPercentChange(openValue,closeValue)
+    [openValue, closeValue, highValue, lowValue, timeValue, percentChange, resultTextColor, resultColor]
+
+
+addTableRow(tcTable,symbol1,symbol2,symbol3,symbol4,symbol5,symbol6,symbol7,symbol8, row) =>
+
+
+    [openValue1, closeValue1, highValue1, lowValue1, timeValue1, percentChange1, resultTextColor1, resultColor1] = getSecurityByTimeFrame(symbol1,timeframe.period)
+    [openValue2, closeValue2, highValue2, lowValue2, timeValue2, percentChange2, resultTextColor2, resultColor2] = getSecurityByTimeFrame(symbol2,timeframe.period)
+    [openValue3, closeValue3, highValue3, lowValue3, timeValue3, percentChange3, resultTextColor3, resultColor3] = getSecurityByTimeFrame(symbol3,timeframe.period)
+    [openValue4, closeValue4, highValue4, lowValue4, timeValue4, percentChange4, resultTextColor4, resultColor4] = getSecurityByTimeFrame(symbol4,timeframe.period)
+    [openValue5, closeValue5, highValue5, lowValue5, timeValue5, percentChange5, resultTextColor5, resultColor5] = getSecurityByTimeFrame(symbol5,timeframe.period)
+    [openValue6, closeValue6, highValue6, lowValue6, timeValue6, percentChange6, resultTextColor6, resultColor6] = getSecurityByTimeFrame(symbol6,timeframe.period)
+    [openValue7, closeValue7, highValue7, lowValue7, timeValue7, percentChange7, resultTextColor7, resultColor7] = getSecurityByTimeFrame(symbol7,timeframe.period)
+    [openValue8, closeValue8, highValue8, lowValue8, timeValue8, percentChange8, resultTextColor8, resultColor8] = getSecurityByTimeFrame(symbol8,timeframe.period)
+
+
+    table.cell(table_id = tcTable, column = 0, row = row, text = symbol1 + '\n' + str.tostring(percentChange1, '#.##') + '%', bgcolor=color.new(resultColor1, tfTableOpacity), text_color=resultTextColor1, text_size=size.auto, width=0)
+    table.cell(table_id = tcTable, column = 1, row = row, text = symbol2 + '\n' + str.tostring(percentChange2, '#.##') + '%', bgcolor=color.new(resultColor2, tfTableOpacity), text_color=resultTextColor2, text_size=size.auto, width=0)
+    table.cell(table_id = tcTable, column = 2, row = row, text = symbol3 + '\n' + str.tostring(percentChange3, '#.##') + '%', bgcolor=color.new(resultColor3, tfTableOpacity), text_color=resultTextColor3, text_size=size.auto, width=0)
+    table.cell(table_id = tcTable, column = 3, row = row, text = symbol4 + '\n' + str.tostring(percentChange4, '#.##') + '%', bgcolor=color.new(resultColor4, tfTableOpacity), text_color=resultTextColor4, text_size=size.auto, width=0)
+    table.cell(table_id = tcTable, column = 4, row = row, text = symbol5 + '\n' + str.tostring(percentChange5, '#.##') + '%', bgcolor=color.new(resultColor5, tfTableOpacity), text_color=resultTextColor5, text_size=size.auto, width=0)
+    table.cell(table_id = tcTable, column = 5, row = row, text = symbol6 + '\n' + str.tostring(percentChange6, '#.##') + '%', bgcolor=color.new(resultColor6, tfTableOpacity), text_color=resultTextColor6, text_size=size.auto, width=0)
+    table.cell(table_id = tcTable, column = 6, row = row, text = symbol7 + '\n' + str.tostring(percentChange7, '#.##') + '%', bgcolor=color.new(resultColor7, tfTableOpacity), text_color=resultTextColor7, text_size=size.auto, width=0)
+    table.cell(table_id = tcTable, column = 7, row = row, text = symbol8 + '\n' + str.tostring(percentChange8, '#.##') + '%', bgcolor=color.new(resultColor8, tfTableOpacity), text_color=resultTextColor8, text_size=size.auto, width=0)
+
+
+//##################################################################################################
+//Ticker Details
+//SPY, QQQ, VXX, XBI, XHB, XLB, XLC, XLE, XLF, XLI, XLK, XLP, XLRE, XLU, XLY, XLV, XRT, XOP, IBB, IYT, TLT, SMH
+//##################################################################################################
+
+// do not show timeframes that are less than the time frame selected (it will be inaccurate)
+if barstate.islast
+    var table tcTable = table.new(position=position.top_right, columns = 8, rows = 25, border_width=3)
+
+    if emptyTopTableRow
+        table.cell(table_id = tcTable, column = 0, row = 0, text = '')
+        table.cell(table_id = tcTable, column = 1, row = 0, text = '')
+        table.cell(table_id = tcTable, column = 2, row = 0, text = '')
+        table.cell(table_id = tcTable, column = 3, row = 0, text = '')
+        table.cell(table_id = tcTable, column = 4, row = 0, text = '')
+        table.cell(table_id = tcTable, column = 5, row = 0, text = '')
+        table.cell(table_id = tcTable, column = 6, row = 0, text = '')
+        table.cell(table_id = tcTable, column = 7, row = 0, text = '')
+
+        addTableRow(tcTable,"SPY","QQQ","VIX","DIA","IWM","SMH","XLK","XLC",1)
+
+        addTableRow(tcTable,"XOP","XLE","XLP","XLU","XBI","XHB","XLB","XLY",2)
+
+    else
+        addTableRow(tcTable,"SPY","QQQ","VIX","DIA","IWM","SMH","XLK","XLC",0)
+
+        addTableRow(tcTable,"XOP","XLE","XLP","XLU","XBI","XHB","XLB","XLY",1)
+
+    //addTableRow(tcTable,"XLF","XLI","XLP","XLRE","XRT","XLY","XLV",3)
+

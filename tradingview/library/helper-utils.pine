@@ -1,0 +1,227 @@
+// @version=5
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Andrei Bunulu - bunulu@gmail.com
+
+//@version=5
+library("Helpers", overlay=true)
+
+// 1
+// ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+
+// @function Generates moving average based on the given parameters
+// @param source - series
+// @param length - length of the moving average
+// @param type - type of moving average (SMA, WMA, VWMA, RMA, HMA, LSMA, TMA, MAEMA) default: EMA
+// @ returns - moving average series
+export ma(float source, simple int length, string type = "EMA") =>
+    switch type
+        "EMA" => ta.ema(source, length)
+        "SMA" => ta.sma(source, length)
+        "WMA" => ta.wma(source, length)
+        "VWMA" => ta.vwma(source, length)
+        "RMA" => ta.rma(source, length)
+        "HMA" => ta.wma(2 * ta.wma(source, length / 2) - ta.wma(source, length), math.round(math.sqrt(length)))
+        "LSMA" => 3 * ta.wma(source, length) - 2 * ta.sma(source, length)
+        "TMA" => ta.swma(ta.wma(source, length))
+        "MAEMA" =>
+            momentumLen = math.round(length / math.phi), momentum = ta.change(source, momentumLen), probabilityLen = length / math.phi / math.phi
+            ta.ema(source + (momentum + ta.change(momentum, momentumLen) * 0.5) * math.sum(ta.change(source) > 0 ? 1 : 0, math.round(probabilityLen)) / probabilityLen, length)
+// Example
+// ------------------------------------------------
+
+// ma1 = f.ma(close, 100)
+// ma2 = f.ma(close, 200, 'SMA')
+
+
+
+
+// 2
+// ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+
+// @function Finds the 2 points are nearby
+// @param a - first source
+// @param b - second source
+// @param atr_period - period of ATR, default is 14
+// @param atr_deviation - deviation of ATR, default is 2.1
+// @ returns true if MA was crossed, false otherwise
+export nearby(float a, float b, simple int atr_period = 14, simple float atr_deviation = 2.1) =>
+    tol = ta.atr(atr_period) / atr_deviation
+    crossed = math.abs(a - b) < tol
+
+// Example
+// ------------------------------------------------
+
+// i_maAtrPeriod = input.int(defval = 14, title='Length', inline = "ma", group = "Moving average")
+// i_maAtrDeviation = input.float(defval = 2.1, title = "Deviation", minval = 0.1, inline = "ma", group = "Moving average")
+//
+// ma = f.ma(close, 200, 'SMA')
+// isCloseNearMa = f.nearby(close, ma, i_maAtrPeriod, i_maAtrDeviation)
+
+
+
+
+// 3
+// ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+
+// @function Checks if for given period of time there was minimum 'n' bars with source condition
+// @param condition - condition to check
+// @param min - minimum number of bars with condition
+// @param max - maximum number of bars with condition
+// @param left_index - index of the left bar, default is 20
+// @param right_index - index of the right bar, default is 0
+// @ returns boolean series
+export has(bool source, simple int min = 1, simple int max = na, int left_index = 20, simple int right_index = 0) =>
+    hasCondition = array.new_int()
+
+    for i = left_index to right_index
+        if source[i]
+            array.push(id = hasCondition, value = i)
+
+    result = array.size(id = hasCondition) >= min and (na(max) ? true : array.size(id = hasCondition) <= max)
+
+// Example
+// ------------------------------------------------
+
+// upCandle = close > open
+// hasTheeUpInLastFiveBars = f.has(upCandle) // true if there are at least 1 condition of 3 up candles in the last (by default 20 bars)
+// hasTheeUpInLastFiveBars = f.has(upCandle, 1)  // same as above but with explicit minimum parameter
+// hasTheeUpInLastFiveBars = f.has(upCandle, 1, na, 5)  // same as above but more explicit with maximum parameter which is not set
+// hasMaxTheeUpInLastFiveBars = f.has(upCandle, 1, 1, 5) // Here we check also if there is maximum 1 condition in last 5 bars
+// hasMaxTheeUpInLastFiveBarsFromPrevBar = f.has(upCandle, 1, 1, 5, 1) // Here we check the same but from previous bar, not from the last one
+
+
+
+
+// 4
+// ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+
+// @function Finds huge bars
+// @param atr_length - average true range length, 14 is default
+// @param percent - percentage to be considered huge, 190 is default
+// @param ma_type - type of moving average (SMA, WMA, VWMA, RMA, HMA, LSMA, TMA, MAEMA) default: SMA
+// @ returns boolean
+export hugeBar(simple int atr_length = 14, simple int percent = 190, simple string ma_type = "SMA") =>
+    atr = ma(ta.tr, atr_length, ma_type)
+    atrPercent = math.round((high - low) / atr[1] * 100)
+    barPercent = math.round((close > open ? (high - open) / open : (low - open) / open) * 10000) / 100
+
+    hugeBar = atrPercent > percent
+
+// Example
+// ------------------------------------------------
+
+// i_hugeBarAtrLength = input.int(14, minval=1, title='Atr length', inline='huge', group="Huge bar")
+// i_hugeBarPercentage = input.int(190, minval=1, title='Percentage', inline='huge', group="Huge bar")
+
+// isHugeBar = f.hugeBar(i_hugeBarAtrLength, i_hugeBarPercentage)
+
+
+
+
+// 5
+// ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+
+// @function Checks if the given source condition is true between the left and right conditions
+// @param leftCondition - first condition to check
+// @param rightCondition - second condition to check
+// @param condition - condition to check in between leftCondition and rightCondition
+// @param min - minimum number of bars with condition
+// @param max - maximum number of bars with condition
+// @ returns boolean series
+export hasConditionInBetween(bool leftCondition, bool rightCondition, bool condition, simple int min = 1, simple int max = na) =>
+    barsSinceLeftCondition = ta.barssince(leftCondition)
+    barsSinceRightCondition = ta.barssince(rightCondition)
+
+    hasCondition = array.new_int()
+
+    for i = barsSinceLeftCondition to barsSinceRightCondition
+        if condition[i]
+            array.push(id = hasCondition, value = i)
+
+    result = array.size(id = hasCondition) >= min and (na(max) ? true : array.size(id = hasCondition) <= max)
+
+// Example
+// ------------------------------------------------
+
+// upCandle            = close > open
+// dwnCandle           = close < open
+
+// leftCondition = upCandle[1] and upCandle
+// rightCondition = dwnCandle
+// priceBigger23k = close > 23000
+
+// hasConditionInBetween = hasConditionInBetween(leftCondition, rightCondition, priceBigger23k, 3)
+
+
+
+
+// 6
+// ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+
+// @function Checks if for given bar there was a volume spike
+// @param length - bars back to check, default is 20
+// @param ma_type - type of moving average (SMA, WMA, VWMA, RMA, HMA, LSMA, TMA, MAEMA) default: SMA
+// @ returns huge volume bar series
+export volumeSpike(simple int length = 20, simple float deviation = 2.0, simple string ma_type = "WMA" ) =>
+    highVol = ma(volume, length, ma_type) + deviation * ta.stdev(volume, length)
+    volumeSpike = volume >= highVol
+
+// Example
+// ------------------------------------------------
+
+// hasVolumeSpike = f.volumeSpike(20, 2.0, 'WMA')
+// hasHugeVolumeSpike = f.volumeSpike(20, 3.0, 'WMA')
+
+
+
+
+// 7
+// ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+
+// @function Shows message on bars when the given source condition is true
+// Was inspired by https://www.tradingview.com/script/NeDnFMpG-debugger/, giving credits to the author
+//
+// @param condition - If na, then shows message on a last bar
+// @param msg - message to show
+// @param step - Step determines the separation between bars identified in the chart.
+//                           For example, step=10 will show every 1 in every 10 bars indexes.
+// @param    from            Show bars from this index
+// @param    until           Show bars until this index.
+//                           The default until=0 will show all bars
+// @param    color           The color of the bar index text on the chart
+// @param    size            The size of the text
+export barMsg(bool condition,
+     string msg = "",
+     simple int step = 10,
+     simple int from = 0,
+     simple int until = 0,
+     simple color color = color.gray,
+     simple string size = size.small) =>
+
+    bar_until = until == 0 ? bar_index : until
+    show = na(condition) ? bar_index == last_bar_index : condition and (bar_index % step == 0) and (bar_index >= from) and (bar_index <= bar_until)
+
+    if show
+        label.new(x         = bar_index,
+                  y         = 0,
+                  yloc      = yloc.abovebar,
+                  text      = str.format("{0}\n▼", msg),
+                  tooltip   = str.format("{0}", bar_index),
+                  textcolor = color,
+                  size      = size,
+                  color     = na,
+                  style     = label.style_none)
+
+// Example
+// ------------------------------------------------
+
+// f.isHugeBar = hugeBar()
+// f.barMsg(isHugeBar, "Huge bar", 1, 0, 0, color.green, size.small) // Shows all bars with huge bar
+// f.barMsg(isHugeBar, "Huge bar", 10) // Shows every 10th bar where huge bar is true
+
+// f.barMsg(na, "Last bar")
+
+// upCandle = close > open
+// condition = upCandle and upCandle[1] and upCandle[2]
+
+// f.barMsg(na, "Condition is: " + str.tostring(has(condition, 1, 1, 20, 1))) // Shows last bar with condition

@@ -1,0 +1,116 @@
+//@version=5
+// ||###################################################################################||
+// ||                                                                                   ||
+// || Cipher DMG                                                                        ||
+// || This indicator displays the current symbol's timeframe continuity from the        ||
+// || selected timeframe and above                                                      ||
+// ||                                                                                   ||
+// || NOTE This is the one which is currently used in most places                       ||
+// ||###################################################################################||
+
+indicator(title="The Strat Timeframe Monitor", shorttitle="The Strat Timeframe Monitor",scale = scale.none, max_bars_back=0,  max_lines_count=500, max_boxes_count=500, max_labels_count = 500, overlay=true, explicit_plot_zorder=false)
+
+//##################################################################################################
+//User Inputs
+//##################################################################################################
+
+//388e3c - Green [rgb(56,142,60)]
+//b22833 - Red [rgb(178,40,51)]
+
+//bullishColor = input.color(color.new(color.green, 0), title='Bullish Candle Color', group='Colors')
+bullishColor = input.color(color.rgb(56,142,60), title='Bullish Candle Color', group='Colors')
+bullishTextColor = input.color(color.new(color.white, 0), title='Bullish Text Color', group='Colors')
+
+//bearishColor = input.color(color.new(color.red, 0), title='Bearish Candle Color', group='Colors')
+bearishColor = input.color(color.rgb(178,40,51), title='Bearish Candle Color', group='Colors')
+bearishTextColor = input.color(color.new(color.white, 0), title='Bearish Text Color', group='Colors')
+
+atrColor = input.color(color.new(color.gray, 0), title='ATR Candle Color', group='Colors')
+atrTextColor = input.color(color.new(color.white, 0), title='ATR Text Color', group='Colors')
+
+tfTableOpacity = input.int(50, title='Multi time frame table opacity', group='Colors')
+
+showPercentChange = input.bool(true, title='Show Percent Change', group='Table')
+showStratSetups = input.bool(true, title='Show Strat Setups', group='Table')
+
+addThreashold = input.float(-1000, title='Add Ticker Threashold', group="Add Ticker")
+
+// frameWidth = input.int(3, title='Table Frame Width', group='Table')
+cellWidth = input.int(3, title='Table Cell Width', group='Table')
+
+///////////////////////////////////////////////
+// END: user input
+///////////////////////////////////////////////
+
+//##################################################################################################
+//Functions
+//##################################################################################################
+
+// FULL TIME FRAME CONTINUITY CODE:
+
+// FULL TIME FRAME CONTINUITY CODE:
+//reusable function for getting detail on the security
+getSecurityByTimeFrame(symbol,timeFrame) =>
+    [openValue, closeValue, highValue, lowValue, timeValue] = request.security(symbol = symbol, timeframe = timeFrame, expression = [open, close, high, low, time], gaps = barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    [openValue, closeValue, highValue, lowValue, timeValue]
+
+//getPercentChange
+getPercentChange(openPrice,closePrice) =>
+
+    //The Percent Change will be the closePrice - openPrice / (max (openPrice, closePrice))
+    percentChange = ((closePrice - openPrice) / (math.max(openPrice,closePrice)) ) * 100.0
+    resultColor = openPrice >= closePrice ? bearishColor : bullishColor
+    timeframeChangeAmt = openPrice >= closePrice ? (openPrice -  closePrice): (closePrice - openPrice)
+    resultTextColor = openPrice >= closePrice ? bearishTextColor : bullishTextColor
+    [percentChange,timeframeChangeAmt,resultTextColor,resultColor]
+
+///////////////////////////////////////////////
+// END: Functions & Logic
+///////////////////////////////////////////////
+
+
+// get open, close, high, and low series for various time frames
+
+//Get ADD and VIX
+[openADDValue, closeADDValue, highADDValue, lowADDValue, timeADDValue] = getSecurityByTimeFrame("USI:ADD",'15')
+[addPercentChange,addAmountChange, addTextColor,addColor] = getPercentChange(openADDValue,closeADDValue)
+addColor := closeADDValue <= addThreashold ? bearishColor : bullishColor
+
+[openVixValue, closeVixValue, highVixValue, lowVixValue, timeVixValue] = getSecurityByTimeFrame("VIX",'1D')
+[vixPercentChange,vixAmountChange, vixTextColor,vixColor] = getPercentChange(openVixValue,closeVixValue)
+
+[open15Value, close15Value, high15Value, low15Value, time15Value] = getSecurityByTimeFrame(syminfo.tickerid,'15')
+[open30Value, close30Value, high30Value, low30Value, time30Value] = getSecurityByTimeFrame(syminfo.tickerid,'30')
+[open60Value, close60Value, highHourValue, lowHourValue, timeHourValue] = getSecurityByTimeFrame(syminfo.tickerid,'60')
+[openDayValue, closeDayValue, highDayValue, lowDayValue, timeDayValue] = getSecurityByTimeFrame(syminfo.tickerid,'1D')
+[openWeekValue, closeWeekValue, highWeekValue, lowWeekValue, timeWeekValue] = getSecurityByTimeFrame(syminfo.tickerid,'1W')
+[openMonthValue, closeMonthValue, highMonthValue, lowMonthValue, timeMonthValue] = getSecurityByTimeFrame(syminfo.tickerid,'1M')
+[openQuarterValue, closeQuarterValue, highQuarterValue, lowQuarterValue, timeQuarterValue] = getSecurityByTimeFrame(syminfo.tickerid,'3M')
+
+
+[openValueD, closeValueD, highValueD, lowValueD, timeValueD] = request.security(symbol = syminfo.tickerid, timeframe = '1D', expression = [open[2], close[2], high[2], low[2], time[2]], gaps = barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+
+float[] arrClose=request.security_lower_tf(syminfo.tickerid, "1", close[1])
+
+
+string counter = ""
+for i = 0 to (array.size(arrClose) == 0 ? na : array.size(arrClose) - 1)
+    counter := counter + str.tostring(nz(array.get(arrClose,i)))
+
+print(txt) =>
+
+    // Create label on the first bar.
+    var lbl = label.new(bar_index, na, txt, xloc.bar_index, yloc.price, color(na), label.style_none, color.gray, size.large, text.align_left)
+    // On next bars, update the label's x and y position, and the text it displays.
+    label.set_xy(lbl, bar_index, ta.highest(10)[1])
+    label.set_text(lbl, txt)
+
+dateString1 = str.tostring(year(timeDayValue)) + "-" + str.tostring(month(timeDayValue))+ "-" + str.tostring(dayofmonth(timeDayValue)) + "-" + str.tostring(hour(timeDayValue)) + "-" + str.tostring(minute(timeDayValue)) + "-" + str.tostring(second(timeDayValue))
+dateString2 = str.tostring(year(timeDayValue[1])) + "-" + str.tostring(month(timeDayValue[1]))+ "-" + str.tostring(dayofmonth(timeDayValue[1])) + "-" + str.tostring(hour(timeDayValue[1])) + "-" + str.tostring(minute(timeDayValue[1])) + "-" + str.tostring(second(timeDayValue[1]))
+dateString3 = str.tostring(year(timeDayValue[2])) + "-" + str.tostring(month(timeDayValue[2]))+ "-" + str.tostring(dayofmonth(timeDayValue[2])) + "-" + str.tostring(hour(timeDayValue[2])) + "-" + str.tostring(minute(timeDayValue[2])) + "-" + str.tostring(second(timeDayValue[2]))
+//print("\n\dateString1: " + dateString1 +  '$' + str.tostring(closeDayValue, '#.##')  + "\ndateString2 = " + dateString2 + " $" + str.tostring(closeDayValue[1], '#.##')  + "\ndateString3 = " + dateString3 + " $" + str.tostring(closeDayValue[2], '#.##') + "\n\n" + str.tostring(array.size(arrClose)) + " " + counter)
+print( str.tostring(arrClose[0]) + " size: " + str.tostring(array.size(arrClose)) + "\n counter: " + counter + "\n openValueD: " + str.tostring(openValueD))
+
+
+// if barstate.islast
+//     label.new(bar_index, high, str.tostring(arrClose))

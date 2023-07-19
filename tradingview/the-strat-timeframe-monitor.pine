@@ -1,0 +1,995 @@
+//@version=5
+// ||###################################################################################||
+// ||                                                                                   ||
+// || Cipher DMG                                                                        ||
+// || This indicator displays the current symbol's timeframe continuity from the        ||
+// || selected timeframe and above                                                      ||
+// ||                                                                                   ||
+// || NOTE This is the one which is currently used in most places                       ||
+// ||###################################################################################||
+
+indicator(title="The Strat Timeframe Monitor", shorttitle="The Strat Timeframe Monitor", max_labels_count = 500, overlay=true)
+
+//##################################################################################################
+//User Inputs
+//##################################################################################################
+
+//388e3c - Green [rgb(56,142,60)]
+//b22833 - Red [rgb(178,40,51)]
+
+//bullishColor = input.color(color.new(color.green, 0), title='Bullish Candle Color', group='Colors')
+bullishColor = input.color(color.rgb(56,142,60), title='Bullish Candle Color', group='Colors')
+bullishTextColor = input.color(color.new(color.white, 0), title='Bullish Text Color', group='Colors')
+
+//bearishColor = input.color(color.new(color.red, 0), title='Bearish Candle Color', group='Colors')
+bearishColor = input.color(color.rgb(178,40,51), title='Bearish Candle Color', group='Colors')
+bearishTextColor = input.color(color.new(color.white, 0), title='Bearish Text Color', group='Colors')
+
+atrColor = input.color(color.new(color.gray, 0), title='ATR Candle Color', group='Colors')
+atrTextColor = input.color(color.new(color.white, 0), title='ATR Text Color', group='Colors')
+showATR = input.bool(true, title='Show ATR', group='Table')
+
+tfTableOpacity = input.int(50, title='Multi time frame table opacity', group='Colors')
+
+showPercentChange = input.bool(true, title='Show Percent Change', group='Table')
+showStratSetups = input.bool(true, title='Show Strat Setups', group='Table')
+
+addThreashold = input.float(-1000, title='Add Ticker Threashold', group="Add Ticker")
+
+// frameWidth = input.int(3, title='Table Frame Width', group='Table')
+cellWidth = input.int(3, title='Table Cell Width', group='Table')
+
+///////////////////////////////////////////////
+// END: user input
+///////////////////////////////////////////////
+
+//##################################################################################################
+//Functions
+//##################################################################################################
+
+
+// @function The given candle is up where the open is less then the close for the given index
+// @param idx index to use
+// @return true if the indexed candle is Green
+isGreenCandle(int idx) =>
+    open[idx] < close[idx]
+
+// @function The given candle is up where the open is greater then or equal to the close for the given index
+// @param idx index to use
+// @return true if the indexed candle is Red
+isRedCandle(int idx) =>
+    open[idx] >= close[idx]
+
+// @function Entire Candle wick to wick is inside the previous candle.  This is considered a Scenario 1.
+// It means its consolidation on a smaller timeframe  We do not want to trade things on a 1 because it has Not picked its direction.
+// @param idx index to use
+// @returns
+isInsideCandle(int idx) =>
+    high[idx] <= high[idx + 1] and low[idx] >= low[idx + 1]
+
+//@function Candle engulfs the previous candle and is typically the larges bar.  This is considered a Scenario 3
+//Most commonly 3s occur after 1
+//@return
+isOutsideCandle(int idx) =>
+    high[idx] > high[idx + 1] and low[idx] < low[idx + 1]
+
+
+//@function  Down Directional Candle which broke the previous candle's low
+isTwoDownCandle(int idx) =>
+    low[idx] < low[idx + 1] and not (high[idx] > high[idx + 1])
+
+//@function 2D Green Candle
+isTwoDownCandleGreen(int idx) =>
+    isTwoDownCandle(idx) and isGreenCandle(idx)
+
+
+//@function Up Directional Candle which broke the previous candle's low
+isTwoUpCandle(int idx) =>
+    high[idx] > high[idx + 1] and not (low[idx] < low[idx + 1])
+
+//@function 2U Red Candle
+isTwoUpCandleRed(int idx) =>
+    isTwoUpCandle(idx) and isRedCandle(idx)
+
+///////////////////////////////////////////////
+//The Strat Setups
+///////////////////////////////////////////////
+//@function 2U-1 Red Candle
+isTwoUpCandleAndInsideCandle(int idx) =>
+    isTwoUpCandle(idx + 1) and isInsideCandle(idx)
+
+//@function 2U-1 Red Candle
+getTwoUpCandleAndInsideCandleRiskReward(int idx) =>
+    math.abs(low[idx + 1] - low[idx]) / math.abs(high[idx] - low[idx])
+
+//@function 2U-1 Red Candle
+getTwoUpCandleAndInsideCandleStop(int idx) =>
+    high[idx]
+
+//@function 2U-1 Red Candle
+getTwoUpCandleAndInsideCandleTarget(int idx) =>
+    low[idx + 1]
+
+
+
+//@function 2D-1 Red Candle
+isTwoDownCandleAndInsideCandle(int idx) =>
+    isTwoDownCandle(idx + 1) and isInsideCandle(idx)
+
+//@function 2D-1 Red Candle
+getTwoDownCandleAndInsideCandleRiskReward(int idx) =>
+    math.abs(high[idx + 1] - high[idx]) / math.abs(high[idx] - low[idx])
+
+//@function 2D-1 Red Candle
+getTwoDownCandleAndInsideCandleStop(int idx) =>
+    low[idx]
+
+//@function 2D-1 Red Candle
+getTwoDownCandleAndInsideCandleTarget(int idx) =>
+    high[idx + 1]
+
+
+//@function 3-1
+isOutsideCandleAndInsideCandle(int idx) =>
+    isOutsideCandle(idx + 1) and isInsideCandle(idx)
+
+isOutsideCandleRedAndInsideCandle(int idx) =>
+    isOutsideCandle(idx + 1) and isRedCandle(idx + 1) and isInsideCandle(idx)
+
+//@function 3-1-2U
+getOutsideCandleRedAndInsideCandleRiskReward(int idx) =>
+    math.abs(high[idx + 1] - high[idx]) / math.abs(high[idx] - low[idx])
+
+//@function 3-1-2U
+getOutsideCandleRedAndInsideCandleStop(int idx) =>
+    low[idx]
+
+//@function 3-1-2U
+getOutsideCandleRedAndInsideCandleTarget(int idx) =>
+    high[idx + 1]
+
+
+//@function 3-1 Green
+isOutsideCandleGreenAndInsideCandle(int idx) =>
+    isOutsideCandle(idx + 1) and isGreenCandle(idx + 1) and isInsideCandle(idx)
+
+//@function 3-1-2D
+getOutsideCandleGreenAndInsideCandleRiskReward(int idx) =>
+    math.abs(high[idx + 1] - high[idx]) / math.abs(high[idx] - low[idx])
+
+//@function 3-1-2D
+getOutsideCandleGreenAndInsideCandleStop(int idx) =>
+    high[idx]
+
+//@function 3-1-2D
+getOutsideCandleGreenAndInsideCandleTarget(int idx) =>
+    low[idx + 1]
+
+
+
+//@function 2D(Green)-2U
+getTwoDownCandleGreenRiskReward(int idx) =>
+    math.abs(high[idx + 1] - high[idx]) / math.abs(high[idx] - low[idx])
+
+//@function 2D(Green)-2U
+getTwoDownCandleGreenStop(int idx) =>
+    low[idx]
+
+//@function 2D(Green)-2U
+getTwoDownCandleGreenTarget(int idx) =>
+    high[idx + 1]
+
+//@function 2U(Red)-2D
+getTwoUpCandleRedRiskReward(int idx) =>
+    math.abs(low[idx + 1] - low[idx]) / math.abs(high[idx] - low[idx])
+
+//@function 2D(Green)-2U
+getTwoUpCandleRedStop(int idx) =>
+    high[idx]
+
+//@function 2D(Green)-2U
+getTwoUpCandleRedTarget(int idx) =>
+    low[idx + 1]
+///////////////////////////////////////////////
+//The Strat Setups
+///////////////////////////////////////////////
+
+// reusable bar identifier functions for series
+isInsideCandleSeries(highSeries, lowSeries) =>
+    highSeries[0] <= highSeries[1] and lowSeries[0] >= lowSeries[1]
+
+isOutsideCandleSeries(highSeries, lowSeries) =>
+    highSeries[0] > highSeries[1] and lowSeries[0] < lowSeries[1]
+
+
+// FULL TIME FRAME CONTINUITY CODE:
+
+// FULL TIME FRAME CONTINUITY CODE:
+//reusable function for getting detail on the security
+// getSecurityByTimeFrame(symbol,timeFrame) =>
+//     getSecurityByTimeFrame(symbol,timeFrame,0)
+
+getSecurityByTimeFrame(symbol,timeFrame) =>
+
+    [openValue, closeValue, highValue, lowValue, timeValue] = request.security(symbol = symbol, timeframe = timeFrame, expression = [open[0], close[0], high[0], low[0], time[0]], gaps = barmerge.gaps_off)
+    [openValue1, closeValue1, highValue1, lowValue1, timeValue1] = request.security(symbol = symbol, timeframe = timeFrame, expression = [open[1], close[1], high[1], low[1], time[1]], gaps = barmerge.gaps_off)
+
+    percentChange = ((closeValue - closeValue1) / closeValue1) * 100
+    //amountChange = (closeValue - closeValue1 >= 0) ? (closeValue -  closeValue1): (closeValue1 - closeValue)
+    amountChange = math.abs(closeValue - closeValue1)
+    resultColor = closeValue >= closeValue1 ? bullishColor: bearishColor
+    resultTextColor = closeValue >= closeValue1 ? bullishTextColor : bearishTextColor
+
+    [openValue, closeValue, highValue, lowValue, timeValue,percentChange,amountChange,resultTextColor,resultColor]
+
+///////////////////////////////////////////////
+// END: Functions & Logic
+///////////////////////////////////////////////
+
+//##################################################################################################
+//FTFC
+//##################################################################################################
+cdayhigh = request.security(syminfo.tickerid, '1D', high)
+cdaylow = request.security(syminfo.tickerid, '1D', low)
+dAtr = request.security(syminfo.tickerid, '1D', ta.atr(14), lookahead=barmerge.lookahead_on)
+
+// get open, close, high, and low series for various time frames
+
+//Get ADD and VIX
+[openADDValue, closeADDValue, highADDValue, lowADDValue, timeADDValue, addPercentChange,addAmountChange, addTextColor,addColor] = getSecurityByTimeFrame("USI:ADD",'15')
+addColor := closeADDValue <= addThreashold ? bearishColor : bullishColor
+
+[openVixValue, closeVixValue, highVixValue, lowVixValue, timeVixValue, vixPercentChange,vixAmountChange, vixTextColor,vixColor] = getSecurityByTimeFrame("VIX",'1D')
+
+[open15Value, close15Value, high15Value, low15Value, time15Value, t15PercentChange, t15AmountChange, t15TextColor,t15Color] = getSecurityByTimeFrame(syminfo.tickerid,'15')
+[open30Value, close30Value, high30Value, low30Value, time30Value, t30PercentChange, t30AmountChange,t30TextColor,t30Color] = getSecurityByTimeFrame(syminfo.tickerid,'30')
+[open60Value, close60Value, highHourValue, lowHourValue, timeHourValue, t60PercentChange, t60AmountChange, t60TextColor,t60Color] = getSecurityByTimeFrame(syminfo.tickerid,'60')
+[openDayValue, closeDayValue, highDayValue, lowDayValue, timeDayValue, tDayPercentChange, tDayAmountChange ,tDayTextColor,tDaryColor] = getSecurityByTimeFrame(syminfo.tickerid,'1D')
+[openWeekValue, closeWeekValue, highWeekValue, lowWeekValue, timeWeekValue, tWeekPercentChange, tWeekAmountChange, tWeekTextColor,tWeekColor] = getSecurityByTimeFrame(syminfo.tickerid,'1W')
+[openMonthValue, closeMonthValue, highMonthValue, lowMonthValue, timeMonthValue, tMonthPercentChange, tMonthAmountChange, tMonthTextColor,tMonthColor] = getSecurityByTimeFrame(syminfo.tickerid,'1M')
+[openQuarterValue, closeQuarterValue, highQuarterValue, lowQuarterValue, timeQuarterValue, t3MonthsPercentChange, t3MonthAmountChange, t3MonthTextColor,t3MonthColor] = getSecurityByTimeFrame(syminfo.tickerid,'3M')
+
+
+addTableRow(tcTable, rowNumber, columnNumber, textValue, bgColor, textColor, widthSize) =>
+    table.cell(table_id = tcTable, column = columnNumber, row = rowNumber, text = textValue, bgcolor=color.new(bgColor, tfTableOpacity), text_color=textColor, text_size=size.auto, width=widthSize)
+
+addTableRowPricePercentChange(tcTable, rowNumber, columnNumber, timeframe, amountChange, percentChange, bgColor, textColor, widthSize) =>
+    if(showPercentChange)
+        table.cell(table_id = tcTable, column = columnNumber, row = rowNumber, text = timeframe + '\n' + str.tostring(percentChange, '#.##') + '%', bgcolor=color.new(bgColor, tfTableOpacity), text_color=textColor, text_size=size.auto, width=widthSize)
+    else
+        table.cell(table_id = tcTable, column = columnNumber, row = rowNumber, text = timeframe + '\n' + '$' + str.tostring(amountChange, '#.##'), bgcolor=color.new(bgColor, tfTableOpacity), text_color=textColor, text_size=size.auto, width=widthSize)
+
+
+//There is a bug, if you select a week it will show the first day of the weeks data, if you show the Month it will show the first week of the months data ... not sure why
+//but this is the same bug as the strat assistant.
+//do not show timeframes that are less than the time frame selected (it will be inaccurate)
+is15ValidTimeFrame = timeframe.period == '1' or timeframe.period == '3' or timeframe.period == '5' or timeframe.period == '10' or timeframe.period == '15'
+is30ValidTimeFrame = timeframe.period == '30'
+isHourValidTimeFrame = timeframe.period == '60'
+isDayValidTimeFrame = timeframe.isdaily
+isWeekValidTimeFrame = timeframe.period == 'W' or timeframe.isintraday
+isMonthValidTimeFrame = timeframe.period == 'M'
+isQuarterValidTimeFrame = timeframe.period == '3M'
+
+//https://www.tradingview.com/script/UFTT8ROh-RedK-Portfolio-Tracker-Table-Version/
+
+//var table tcTable = table.new(position=position.top_right, columns = 15, rows = 1, frame_width=frameWidth, border_width=cellWidth)
+var table tcTable = table.new(position=position.top_right, columns = 15, rows = 1, border_width=cellWidth)
+
+// do not show timeframes that are less than the time frame selected (it will be inaccurate)
+if barstate.islast
+
+    if is15ValidTimeFrame
+        //12 Rows
+        addTableRowPricePercentChange(tcTable,0 , 0, '15', t15AmountChange, t15PercentChange, t15Color, t15TextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 1, '30', t30AmountChange, t30PercentChange, t30Color, t30TextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 2, '60', t60AmountChange, t60PercentChange, t60Color, t60TextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 3, 'D', tDayAmountChange, tDayPercentChange, tDaryColor, tDayTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 4, 'W', tWeekAmountChange, tWeekPercentChange, tWeekColor, tWeekTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 5, 'M', tMonthAmountChange, tMonthPercentChange, tMonthColor, tMonthTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 6, '3M', t3MonthAmountChange, t3MonthsPercentChange, t3MonthColor, t3MonthTextColor, 0)
+        addTableRow(tcTable,0 , 7, 'VIX' + '\n' + '$' + str.tostring(closeVixValue, '#.##'), vixColor, vixTextColor, 0) //VIX
+        addTableRow(tcTable,0 , 8, 'ADD' + '\n' + str.tostring(closeADDValue, '#.##'), addColor, addTextColor, 0) //ADD
+
+        int nextColumn=9
+        if(showATR)
+            addTableRow(tcTable,0 , 9, 'ATR' + '\n' + '$' + str.tostring(dAtr, '#.##'), atrColor, atrTextColor, 0) //ATR
+            nextColumn:=10
+
+        if barstate.isrealtime and showStratSetups
+
+            //DTR
+            //table.cell(table_id = tcTable, column = 8, row = 0, text = 'DTR' + '\n' + '$' + str.tostring(cdayhigh - cdaylow, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+            if isTwoUpCandleAndInsideCandle(0)
+                stratSetup = "2U-1-2D"
+                riskRiskReward = getTwoUpCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoUpCandleAndInsideCandleStop(0)
+                valueTarget = getTwoUpCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 11, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleAndInsideCandle(0)
+                stratSetup = "2D-1-2U"
+                riskRiskReward = getTwoDownCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoDownCandleAndInsideCandleStop(0)
+                valueTarget = getTwoDownCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 11, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleGreenAndInsideCandle(0)
+                stratSetup = "3-1-2D"
+                riskRiskReward = getOutsideCandleGreenAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleGreenAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleGreenAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 11, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleRedAndInsideCandle(0)
+                stratSetup = "3-1-2U"
+                riskRiskReward = getOutsideCandleRedAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleRedAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleRedAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 11, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+
+            else if isTwoUpCandleRed(0)
+                stratSetup = "2U-2D"
+                riskRiskReward = getTwoUpCandleRedRiskReward(0)
+                valueStop = getTwoUpCandleRedStop(0)
+                valueTarget = getTwoUpCandleRedTarget(0)
+
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 11, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleGreen(0)
+                stratSetup = "2D-2U"
+                riskRiskReward = getTwoDownCandleGreenRiskReward(0)
+                valueStop = getTwoDownCandleGreenStop(0)
+                valueTarget = getTwoDownCandleGreenTarget(0)
+
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 11, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'RR' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Stop' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 11, row = 0, text = 'Target', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, 'N/A', atrColor, atrTextColor, 0) //Strat Setup
+
+    else if is30ValidTimeFrame
+        //11
+
+        addTableRowPricePercentChange(tcTable,0 , 0, '30', t30AmountChange, t30PercentChange, t30Color, t30TextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 1, '60', t60AmountChange, t60PercentChange, t60Color, t60TextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 2, 'D', tDayAmountChange, tDayPercentChange, tDaryColor, tDayTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 3, 'W', tWeekAmountChange, tWeekPercentChange, tWeekColor, tWeekTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 4, 'M', tMonthAmountChange, tMonthPercentChange, tMonthColor, tMonthTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 5, '3M', t3MonthAmountChange, t3MonthsPercentChange, t3MonthColor, t3MonthTextColor, 0)
+        addTableRow(tcTable,0 , 6, 'VIX' + '\n' + '$' + str.tostring(closeVixValue, '#.##'), vixColor, vixTextColor, 0) //VIX
+        addTableRow(tcTable,0 , 7, 'ADD' + '\n' + str.tostring(closeADDValue, '#.##'), addColor, addTextColor, 0) //ADD
+
+        int nextColumn=8
+        if(showATR)
+            addTableRow(tcTable,0 , 8, 'ATR' + '\n' + '$' + str.tostring(dAtr, '#.##'), atrColor, atrTextColor, 0) //ATR
+            nextColumn:=9
+
+        if barstate.isrealtime and showStratSetups
+            //DTR
+            //table.cell(table_id = tcTable, column = 7, row = 0, text = 'DTR' + '\n' + '$' + str.tostring(cdayhigh - cdaylow, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+            if isTwoUpCandleAndInsideCandle(0)
+                stratSetup = "2U-1-2D"
+                riskRiskReward = getTwoUpCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoUpCandleAndInsideCandleStop(0)
+                valueTarget = getTwoUpCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleAndInsideCandle(0)
+                stratSetup = "2D-1-2U"
+                riskRiskReward = getTwoDownCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoDownCandleAndInsideCandleStop(0)
+                valueTarget = getTwoDownCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleGreenAndInsideCandle(0)
+                stratSetup = "3-1-2D"
+                riskRiskReward = getOutsideCandleGreenAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleGreenAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleGreenAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleRedAndInsideCandle(0)
+                stratSetup = "3-1-2U"
+                riskRiskReward = getOutsideCandleRedAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleRedAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleRedAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+
+            else if isTwoUpCandleRed(0)
+                stratSetup = "2U-2D"
+                riskRiskReward = getTwoUpCandleRedRiskReward(0)
+                valueStop = getTwoUpCandleRedStop(0)
+                valueTarget = getTwoUpCandleRedTarget(0)
+
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleGreen(0)
+                stratSetup = "2D-2U"
+                riskRiskReward = getTwoDownCandleGreenRiskReward(0)
+                valueStop = getTwoDownCandleGreenStop(0)
+                valueTarget = getTwoDownCandleGreenTarget(0)
+
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'RR' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Stop' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 10, row = 0, text = 'Target', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                addTableRow(tcTable,0 , nextColumn, 'N/A', atrColor, atrTextColor, 0) //Strat Setup
+
+    else if isHourValidTimeFrame
+        //10 Rows
+
+        addTableRowPricePercentChange(tcTable,0 , 0, '60', t60AmountChange, t60PercentChange, t60Color, t60TextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 1, 'D', tDayAmountChange, tDayPercentChange, tDaryColor, tDayTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 2, 'W', tWeekAmountChange, tWeekPercentChange, tWeekColor, tWeekTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 3, 'M', tMonthAmountChange, tMonthPercentChange, tMonthColor, tMonthTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 4, '3M', t3MonthAmountChange, t3MonthsPercentChange, t3MonthColor, t3MonthTextColor, 0)
+        addTableRow(tcTable,0 , 5, 'VIX' + '\n' + '$' + str.tostring(closeVixValue, '#.##'), vixColor, vixTextColor, 0) //VIX
+        addTableRow(tcTable,0 , 6, 'ADD' + '\n' + str.tostring(closeADDValue, '#.##'), addColor, addTextColor, 0) //ADD
+
+
+        int nextColumn=7
+        if(showATR)
+            addTableRow(tcTable,0 , 7, 'ATR' + '\n' + '$' + str.tostring(dAtr, '#.##'), atrColor, atrTextColor, 0) //ATR
+            nextColumn:=8
+
+        if barstate.isrealtime and showStratSetups
+            //DTR
+            //table.cell(table_id = tcTable, column = 6, row = 0, text = 'DTR' + '\n' + '$' + str.tostring(cdayhigh - cdaylow, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+            if isTwoUpCandleAndInsideCandle(0)
+                stratSetup = "2U-1-2D"
+                riskRiskReward = getTwoUpCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoUpCandleAndInsideCandleStop(0)
+                valueTarget = getTwoUpCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleAndInsideCandle(0)
+                stratSetup = "2D-1-2U"
+                riskRiskReward = getTwoDownCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoDownCandleAndInsideCandleStop(0)
+                valueTarget = getTwoDownCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleGreenAndInsideCandle(0)
+                stratSetup = "3-1-2D"
+                riskRiskReward = getOutsideCandleGreenAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleGreenAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleGreenAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleRedAndInsideCandle(0)
+                stratSetup = "3-1-2U"
+                riskRiskReward = getOutsideCandleRedAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleRedAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleRedAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+
+            else if isTwoUpCandleRed(0)
+                stratSetup = "2U-2D"
+                riskRiskReward = getTwoUpCandleRedRiskReward(0)
+                valueStop = getTwoUpCandleRedStop(0)
+                valueTarget = getTwoUpCandleRedTarget(0)
+
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleGreen(0)
+                stratSetup = "2D-2U"
+                riskRiskReward = getTwoDownCandleGreenRiskReward(0)
+                valueStop = getTwoDownCandleGreenStop(0)
+                valueTarget = getTwoDownCandleGreenTarget(0)
+
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'RR' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Stop' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 9, row = 0, text = 'Target', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, 'N/A', atrColor, atrTextColor, 0) //Strat Setup
+
+    else if isDayValidTimeFrame
+        //9 Rows
+
+        addTableRowPricePercentChange(tcTable,0 , 0, 'D', tDayAmountChange, tDayPercentChange, tDaryColor, tDayTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 1, 'W', tWeekAmountChange, tWeekPercentChange, tWeekColor, tWeekTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 2, 'M', tMonthAmountChange, tMonthPercentChange, tMonthColor, tMonthTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 3, '3M', t3MonthAmountChange, t3MonthsPercentChange, t3MonthColor, t3MonthTextColor, 0)
+        addTableRow(tcTable,0 , 4, 'VIX' + '\n' + '$' + str.tostring(closeVixValue, '#.##'), vixColor, vixTextColor, 0) //VIX
+        addTableRow(tcTable,0 , 5, 'ADD' + '\n' + str.tostring(closeADDValue, '#.##'), addColor, addTextColor, 0) //ADD
+        addTableRow(tcTable,0 , 6, 'ATR' + '\n' + '$' + str.tostring(dAtr, '#.##'), atrColor, atrTextColor, 0) //ATR
+
+        int nextColumn=6
+        if(showATR)
+            addTableRow(tcTable,0 , 6, 'ATR' + '\n' + '$' + str.tostring(dAtr, '#.##'), atrColor, atrTextColor, 0) //ATR
+            nextColumn:=7
+
+        if barstate.isrealtime and showStratSetups
+
+            //DTR
+            //table.cell(table_id = tcTable, column = 5, row = 0, text = 'DTR' + '\n' + '$' + str.tostring(cdayhigh - cdaylow, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+            if isTwoUpCandleAndInsideCandle(0)
+                stratSetup = "2U-1-2D"
+                riskRiskReward = getTwoUpCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoUpCandleAndInsideCandleStop(0)
+                valueTarget = getTwoUpCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleAndInsideCandle(0)
+                stratSetup = "2D-1-2U"
+                riskRiskReward = getTwoDownCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoDownCandleAndInsideCandleStop(0)
+                valueTarget = getTwoDownCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleGreenAndInsideCandle(0)
+                stratSetup = "3-1-2D"
+                riskRiskReward = getOutsideCandleGreenAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleGreenAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleGreenAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleRedAndInsideCandle(0)
+                stratSetup = "3-1-2U"
+                riskRiskReward = getOutsideCandleRedAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleRedAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleRedAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+
+            else if isTwoUpCandleRed(0)
+                stratSetup = "2U-2D"
+                riskRiskReward = getTwoUpCandleRedRiskReward(0)
+                valueStop = getTwoUpCandleRedStop(0)
+                valueTarget = getTwoUpCandleRedTarget(0)
+
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleGreen(0)
+                stratSetup = "2D-2U"
+                riskRiskReward = getTwoDownCandleGreenRiskReward(0)
+                valueStop = getTwoDownCandleGreenStop(0)
+                valueTarget = getTwoDownCandleGreenTarget(0)
+
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'RR' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Stop' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 8, row = 0, text = 'Target', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, 'N/A', atrColor, atrTextColor, 0) //Strat Setup
+
+    else if isWeekValidTimeFrame
+        //8 Rows
+
+        addTableRowPricePercentChange(tcTable,0 , 0, 'W', tWeekAmountChange, tWeekPercentChange, tWeekColor, tWeekTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 1, 'M', tMonthAmountChange, tMonthPercentChange, tMonthColor, tMonthTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 2, '3M', t3MonthAmountChange, t3MonthsPercentChange, t3MonthColor, t3MonthTextColor, 0)
+        addTableRow(tcTable,0 , 3, 'VIX' + '\n' + '$' + str.tostring(closeVixValue, '#.##'), vixColor, vixTextColor, 0) //VIX
+        addTableRow(tcTable,0 , 4, 'ADD' + '\n' + str.tostring(closeADDValue, '#.##'), addColor, addTextColor, 0) //ADD
+
+        int nextColumn=5
+        if(showATR)
+            addTableRow(tcTable,0 , 5, 'ATR' + '\n' + '$' + str.tostring(dAtr, '#.##'), atrColor, atrTextColor, 0) //ATR
+            nextColumn:=6
+
+        if barstate.isrealtime and showStratSetups
+            //DTR
+            //table.cell(table_id = tcTable, column = 4, row = 0, text = 'DTR' + '\n' + '$' + str.tostring(cdayhigh - cdaylow, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+            if isTwoUpCandleAndInsideCandle(0)
+                stratSetup = "2U-1-2D"
+                riskRiskReward = getTwoUpCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoUpCandleAndInsideCandleStop(0)
+                valueTarget = getTwoUpCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleAndInsideCandle(0)
+                stratSetup = "2D-1-2U"
+                riskRiskReward = getTwoDownCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoDownCandleAndInsideCandleStop(0)
+                valueTarget = getTwoDownCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleGreenAndInsideCandle(0)
+                stratSetup = "3-1-2D"
+                riskRiskReward = getOutsideCandleGreenAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleGreenAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleGreenAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleRedAndInsideCandle(0)
+                stratSetup = "3-1-2U"
+                riskRiskReward = getOutsideCandleRedAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleRedAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleRedAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+
+            else if isTwoUpCandleRed(0)
+                stratSetup = "2U-2D"
+                riskRiskReward = getTwoUpCandleRedRiskReward(0)
+                valueStop = getTwoUpCandleRedStop(0)
+                valueTarget = getTwoUpCandleRedTarget(0)
+
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleGreen(0)
+                stratSetup = "2D-2U"
+                riskRiskReward = getTwoDownCandleGreenRiskReward(0)
+                valueStop = getTwoDownCandleGreenStop(0)
+                valueTarget = getTwoDownCandleGreenTarget(0)
+
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'RR' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Stop' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 7, row = 0, text = 'Target', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, 'N/A', atrColor, atrTextColor, 0) //Strat Setup
+
+
+    else if isMonthValidTimeFrame
+        //8 Rows
+
+        addTableRowPricePercentChange(tcTable,0 , 0, 'M', tMonthAmountChange, tMonthPercentChange, tMonthColor, tMonthTextColor, 0)
+        addTableRowPricePercentChange(tcTable,0 , 1, '3M', t3MonthAmountChange, t3MonthsPercentChange, t3MonthColor, t3MonthTextColor, 0)
+        addTableRow(tcTable,0 , 2, 'VIX' + '\n' + '$' + str.tostring(closeVixValue, '#.##'), vixColor, vixTextColor, 0) //VIX
+        addTableRow(tcTable,0 , 3, 'ADD' + '\n' + str.tostring(closeADDValue, '#.##'), addColor, addTextColor, 0) //ADD
+
+
+        int nextColumn=4
+        if(showATR)
+            addTableRow(tcTable,0 , 4, 'ATR' + '\n' + '$' + str.tostring(dAtr, '#.##'), atrColor, atrTextColor, 0) //ATR
+            nextColumn:=5
+
+        if barstate.isrealtime and showStratSetups
+            //DTR
+            //table.cell(table_id = tcTable, column = 3, row = 0, text = 'DTR' + '\n' + '$' + str.tostring(cdayhigh - cdaylow, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+            if isTwoUpCandleAndInsideCandle(0)
+                stratSetup = "2U-1-2D"
+                riskRiskReward = getTwoUpCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoUpCandleAndInsideCandleStop(0)
+                valueTarget = getTwoUpCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleAndInsideCandle(0)
+                stratSetup = "2D-1-2U"
+                riskRiskReward = getTwoDownCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoDownCandleAndInsideCandleStop(0)
+                valueTarget = getTwoDownCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleGreenAndInsideCandle(0)
+                stratSetup = "3-1-2D"
+                riskRiskReward = getOutsideCandleGreenAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleGreenAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleGreenAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleRedAndInsideCandle(0)
+                stratSetup = "3-1-2U"
+                riskRiskReward = getOutsideCandleRedAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleRedAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleRedAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+
+            else if isTwoUpCandleRed(0)
+                stratSetup = "2U-2D"
+                riskRiskReward = getTwoUpCandleRedRiskReward(0)
+                valueStop = getTwoUpCandleRedStop(0)
+                valueTarget = getTwoUpCandleRedTarget(0)
+
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleGreen(0)
+                stratSetup = "2D-2U"
+                riskRiskReward = getTwoDownCandleGreenRiskReward(0)
+                valueStop = getTwoDownCandleGreenStop(0)
+                valueTarget = getTwoDownCandleGreenTarget(0)
+
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = 'RR' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Stop' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 6, row = 0, text = 'Target', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, 'N/A', atrColor, atrTextColor, 0) //Strat Setup
+
+    else if isQuarterValidTimeFrame
+        //7 Rows
+
+        addTableRowPricePercentChange(tcTable,0 , 0, '3M', t3MonthAmountChange, t3MonthsPercentChange, t3MonthColor, t3MonthTextColor, 0)
+        addTableRow(tcTable,0 , 1, 'VIX' + '\n' + '$' + str.tostring(closeVixValue, '#.##'), vixColor, vixTextColor, 0) //VIX
+        addTableRow(tcTable,0 , 2, 'ADD' + '\n' + str.tostring(closeADDValue, '#.##'), addColor, addTextColor, 0) //ADD
+
+        int nextColumn=3
+        if(showATR)
+            addTableRow(tcTable,0 , 3, 'ATR' + '\n' + '$' + str.tostring(dAtr, '#.##'), atrColor, atrTextColor, 0) //ATR
+            nextColumn:=4
+
+        if barstate.isrealtime and showStratSetups
+            //DTR
+            //table.cell(table_id = tcTable, column = 2, row = 0, text = 'DTR' + '\n' + '$' + str.tostring(cdayhigh - cdaylow, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+            if isTwoUpCandleAndInsideCandle(0)
+                stratSetup = "2U-1-2D"
+                riskRiskReward = getTwoUpCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoUpCandleAndInsideCandleStop(0)
+                valueTarget = getTwoUpCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 3, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleAndInsideCandle(0)
+                stratSetup = "2D-1-2U"
+                riskRiskReward = getTwoDownCandleAndInsideCandleRiskReward(0)
+                valueStop = getTwoDownCandleAndInsideCandleStop(0)
+                valueTarget = getTwoDownCandleAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 3, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleGreenAndInsideCandle(0)
+                stratSetup = "3-1-2D"
+                riskRiskReward = getOutsideCandleGreenAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleGreenAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleGreenAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 3, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isOutsideCandleRedAndInsideCandle(0)
+                stratSetup = "3-1-2U"
+                riskRiskReward = getOutsideCandleRedAndInsideCandleRiskReward(0)
+                valueStop = getOutsideCandleRedAndInsideCandleStop(0)
+                valueTarget = getOutsideCandleRedAndInsideCandleTarget(0)
+
+                // table.cell(table_id = tcTable, column = 3, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+
+            else if isTwoUpCandleRed(0)
+                stratSetup = "2U-2D"
+                riskRiskReward = getTwoUpCandleRedRiskReward(0)
+                valueStop = getTwoUpCandleRedStop(0)
+                valueTarget = getTwoUpCandleRedTarget(0)
+
+                // table.cell(table_id = tcTable, column = 3, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else if isTwoDownCandleGreen(0)
+                stratSetup = "2D-2U"
+                riskRiskReward = getTwoDownCandleGreenRiskReward(0)
+                valueStop = getTwoDownCandleGreenStop(0)
+                valueTarget = getTwoDownCandleGreenTarget(0)
+
+                // table.cell(table_id = tcTable, column = 3, row = 0, text = stratSetup + '\n' + '$' + str.tostring(riskRiskReward, '#.##') + ' RR', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = 'Stop' + '\n' + '$' + str.tostring(valueStop, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Target' + '\n' + '$' + str.tostring(valueTarget, '#.##'), bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, stratSetup + '\n' + '$' + str.tostring(valueStop, '#.##'), atrColor, atrTextColor, 0) //Strat Setup
+
+            else
+                // table.cell(table_id = tcTable, column = 3, row = 0, text = 'RR' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 4, row = 0, text = 'Stop' , bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+                // table.cell(table_id = tcTable, column = 5, row = 0, text = 'Target', bgcolor=color.new(atrColor, tfTableOpacity), text_color=atrTextColor, text_size=size.auto, width=0)
+
+                addTableRow(tcTable,0 , nextColumn, 'N/A', atrColor, atrTextColor, 0) //Strat Setup
+
+// // previous high low lines
+// if (timeframe.isintraday or timeframe.isdaily)
+//     highDayLine = line.new(x1=timeDayValue[1], y1=highDayValue[1], x2=time, xloc=xloc.bar_time, y2=highDayValue[1], extend=extend.right, color=color.green, style=line.style_dashed, width=0)
+//     line.delete(highDayLine[1])
+
+// if (timeframe.isintraday or timeframe.isdaily)
+//     lowDayLine = line.new(x1=timeDayValue[1], y1=lowDayValue[1], x2=time, xloc=xloc.bar_time, y2=lowDayValue[1], extend=extend.right, color=color.red, style=line.style_dashed, width=0)
+//     line.delete(lowDayLine[1])
+
+// if (timeframe.isintraday or timeframe.isdaily or timeframe.isweekly)
+//     highWeekLine = line.new(x1=timeDayValue[1], y1=highWeekValue[1], x2=time, xloc=xloc.bar_time, y2=highWeekValue[1], extend=extend.right, color=color.green, style=line.style_dashed, width=0)
+//     line.delete(highWeekLine[1])
+
+// if (timeframe.isintraday or timeframe.isdaily or timeframe.isweekly)
+//     lowWeekLine = line.new(x1=timeDayValue[1], y1=lowWeekValue[1], x2=time, xloc=xloc.bar_time, y2=lowWeekValue[1], extend=extend.right, color=color.red, style=line.style_dashed, width=0)
+//     line.delete(lowWeekLine[1])

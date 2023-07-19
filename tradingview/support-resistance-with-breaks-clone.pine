@@ -1,0 +1,58 @@
+// This work is licensed under a Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0) https://creativecommons.org/licenses/by-nc-sa/4.0/
+// © LuxAlgo
+//https://www.tradingview.com/script/JDFoWQbL-Support-and-Resistance-Levels-with-Breaks-LUX/
+
+//@version=5
+indicator(title='Support and Resistance Levels with Breaks', shorttitle=' Support and Resistance Levels with Breaks', overlay=true, max_bars_back=1000)
+//
+toggleBreaks = input(true, title='Show Breaks')
+leftBars = input(15, title='Left Bars ')
+rightBars = input(15, title='Right Bars')
+volumeThresh = input(20, title='Volume Threshold')
+
+//t = time('1440', '0000-0930:23456')  // 1440 is the number of minutes in a whole day and 390 minutes in a trading day
+inSession = not na(time('1440', "0930-1600"))
+
+//daily_timestamp=timestamp(2022, 09, 08, 09, 43, 22)
+
+//daily_timestamp=time
+
+//[openValue, closeValue, highValue, lowValue, daily_timestamp] = request.security(symbol = syminfo.tickerid, timeframe = "D", expression = [open[1], close[1], high[1], low[1], time[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+//daily_timestamp = request.security(symbol = syminfo.tickerid, timeframe = "D", expression = last_bar_time + 1, barmerge.gaps_off, barmerge.lookahead_on)#
+daily_timestamp = request.security(symbol = syminfo.tickerid, timeframe = "D", expression = last_bar_time, gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+//todaysBars = ta.barssince(time("") == daily_timestamp)
+
+
+// barssince() returns zero on the bar where the condition is met. Lengths, however, cannot be zero, so you need to ensure the length has a minimum value of one, which can be accomplished by using max(1, len).
+// At the beginning of a dataset, until the condition is detected a first time, barssince() returns na, which also cannot be used as a length, so you must protect your calculation against this, which can be done by using nz(len).
+// The length must be an “int”, so it is safer to cast the result of your length’s calculation to an “int” using int(len).
+// Finally, a barssince() value of 0 must translate to a variable length of 1, and so on, so we must add 1 to the value returned by barssince().
+todaysBars = int(math.max(0, nz(ta.barssince(time("") == daily_timestamp))))
+//timeout = ta.barssince(time("") == daily_timestamp)
+
+
+highUsePivot = fixnan(ta.pivothigh(leftBars, rightBars)[1])
+lowUsePivot = fixnan(ta.pivotlow(leftBars, rightBars)[1])
+r1 = plot(series=(todaysBars <= 0)? na : highUsePivot, style=plot.style_line, color=ta.change(highUsePivot) ? na : #FF0000, linewidth=3, offset=-(rightBars + 1), title='Resistance')
+s1 = plot(series=(todaysBars <= 0)? na : lowUsePivot, style=plot.style_line, color=ta.change(lowUsePivot) ? na : #233dee, linewidth=3,  offset=-(rightBars + 1), title='Support')
+// r1 = plot(series=highUsePivot, style=plot.style_line, color=ta.change(highUsePivot) ? na : #FF0000, linewidth=3, trackprice=true, offset=-(rightBars + 1), title='Resistance')
+// s1 = plot(series=lowUsePivot, style=plot.style_line, color=ta.change(lowUsePivot) ? na : #233dee, linewidth=3, trackprice=true, offset=-(rightBars + 1), title='Support')
+
+//Volume %
+short = ta.ema(volume, 5)
+long = ta.ema(volume, 10)
+osc = 100 * (short - long) / long
+
+
+//For breaks with volume
+plotshape(toggleBreaks and ta.crossunder(close, lowUsePivot) and not(open - close < high - open) and osc > volumeThresh, title='Break', text='B', style=shape.labeldown, location=location.abovebar, color=color.new(color.red, 0), textcolor=color.new(color.white, 0), size=size.tiny)
+plotshape(toggleBreaks and ta.crossover(close, highUsePivot) and not(open - low > close - open) and osc > volumeThresh, title='Break', text='B', style=shape.labelup, location=location.belowbar, color=color.new(color.green, 0), textcolor=color.new(color.white, 0), size=size.tiny)
+
+//For bull / bear wicks
+plotshape(toggleBreaks and ta.crossover(close, highUsePivot) and open - low > close - open, title='Break', text='Bull Wick', style=shape.labelup, location=location.belowbar, color=color.new(color.green, 0), textcolor=color.new(color.white, 0), size=size.tiny)
+plotshape(toggleBreaks and ta.crossunder(close, lowUsePivot) and open - close < high - open, title='Break', text='Bear Wick', style=shape.labeldown, location=location.abovebar, color=color.new(color.red, 0), textcolor=color.new(color.white, 0), size=size.tiny)
+
+
+alertcondition(ta.crossunder(close, lowUsePivot) and osc > volumeThresh, title='Support Broken', message='Support Broken')
+alertcondition(ta.crossover(close, highUsePivot) and osc > volumeThresh, title='Resistance Broken', message='Resistance Broken')
+

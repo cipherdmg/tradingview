@@ -1,0 +1,797 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © livingdraculaog
+
+//@version=5
+// @description     This library provides to provide simple, semantic, reusable utility functions for analyzing candlesticks, wicks, patterns, trends, volume, and more...
+library("CandleStore", true)
+
+
+////////////////////////////////////////////////////////////////////
+// Candle Utilities
+////////////////////////////////////////////////////////////////////{
+// @returns a series of floats, representing the difference between the high and low
+export _candleRange() => high-low
+
+// @param barsback, an int representing how far back you want to get a range
+export _PreviousCandleRange(simple int barsback) => high[barsback]-low[barsback]
+
+// @returns a true if close < open
+export redCandle()  =>  close < open
+// @returns a true if close > open
+export greenCandle()=>  close > open
+// @returns a true if open < close
+export _WhiteBody() =>  open < close
+// @returns a true if open > close
+export _BlackBody() =>  open > close
+
+// @returns a series of floats representing the high - open
+export HighOpenDiff() => high - open
+// @returns a series of floats representing the open - low
+export OpenLowDiff()  => open - low
+
+
+// @returns a SERIES of BOOL, after checking if CLOSE was greater or equal to previous OPEN
+export _isCloseAbovePreviousOpen(simple int length) => close >= open[length]
+// @returns a SERIES of BOOL.
+export _isCloseBelowPrevious() => close <= close[1]
+// @returns a SERIES of BOOL, after checking if CLOSE was Greater or equal to previous OPEN
+export _isOpenGreaterThanPrevious() => open >= close[1]
+// @returns a SERIES of BOOL, after checking if OPEN was LESS than or equal to previous CLOSE.
+export _isOpenLessThanPrevious() => open <= close[1] // previous _WhiteBody?
+
+
+export BodyHigh() => math.max(close, open)
+
+export BodyLow()  => math.min(close, open)
+
+// @returns a SERIES of FLOATS, each of which are the difference between the top and bottom per candle.
+export _candleBody() => BodyHigh() - BodyLow()
+
+// @function _BodyAvg(int) function.
+// @param candle_length, Required (recommended is 6).
+export _BodyAvg(simple int length)      => ta.ema(_candleBody(), length)
+
+// @returns a SERIES of BOOL, after checking if the candle BODY was less then Body Average.
+// @param candle_length. length of the slow EMA
+export _SmallBody(simple int length)    => _candleBody() < _BodyAvg(length)
+
+// @returns a SERIES of BOOL, after checking if the candle BODY was GREATER then Body Average.
+export _LongBody(simple int length)     => _candleBody() > _BodyAvg(length)
+
+
+_IsInsideBar = BodyHigh()[1] > BodyHigh() and BodyLow()[1] < BodyLow()
+_candleBodyMiddle = _candleBody() / 2 + BodyLow()
+
+////# Shadow
+_ShadowPercent = 5.0 // size of shadows
+_ShadowEqualsPercent = 100.0
+_ShadowDominatLength = 2.0 // shows the number of times the shadow dominates the candlestick body
+_UpShadow = high - BodyHigh()
+_DownShadow = BodyLow() - low
+_HasUpShadow = _UpShadow > _ShadowPercent / 100 * _candleBody()
+_HasDownShadow = _DownShadow > _ShadowPercent / 100 * _candleBody()
+_ShadowEquals = _UpShadow == _DownShadow or (math.abs(_UpShadow - _DownShadow) / _DownShadow * 100) < _ShadowEqualsPercent and (math.abs(_DownShadow - _UpShadow) / _UpShadow * 100) < _ShadowEqualsPercent
+////
+
+
+
+////////////////////////////////////////////////////////////////////
+////# Wick Utilities
+////////////////////////////////////////////////////////////////////{
+// This Indicator measures the wick parts of candles and sum it up.
+// Wick part of candle is a sign of strength that's why it measures the 60 bars of candles wick. then sum it up and converted it in percentage.
+// The output is indicated in the last 10 candles. that's how simple this indicator is but very useful to analyze the strength of every candles.
+// The upper numbers is the bear power.
+// The lower numbers is the bull power.
+
+// @function bearWick() function.
+// @returns a SERIES of FLOATS, checks if it's a blackBody(open > close), if it is, than check the difference between the high and open, else checks the difference between high and close.
+export bearWick()   => high - (_BlackBody() ? open : close)
+
+// @returns a SERIES of FLOATS, checks if it's a whiteBody(open < close), if it is, than check the difference of OPEN & LOW (open - close), else checks the difference of OPEN & low (open - low).
+export bullWick()   => (_WhiteBody() ? open : close) - low
+
+// @returns a SERIES of FLOATS, checks if the candle is green, than check the difference of CLOSE & OPEN (close - open), else checks the difference of OPEN & CLOSE (open - close).
+export barlength()  => greenCandle() ? close - open : open - close
+
+export sumbarlength()    => math.sum(barlength(), 60)
+export sumbull()         => math.sum(bearWick(), 60) / sumbarlength() * 100
+export sumbear()         => math.sum(bullWick(), 60) / sumbarlength() * 100
+
+bullPower_converted = str.tostring(math.floor(sumbull()))
+bearPower_converted = str.tostring(math.floor(sumbear()))
+////////////////////////////////////////////////////////////////////}
+
+
+
+////////////////////////////////////////////////////////////////////}
+// Volume Utilities
+////////////////////////////////////////////////////////////////////{
+
+////# Constants for volume fight
+
+export bull_vol() => _WhiteBody() ? volume : volume * (HighOpenDiff() ) / ( _candleRange() )
+export bear_vol() => _BlackBody() ? volume : volume * (OpenLowDiff()  ) / ( _candleRange() )
+
+// @returns simple int, which is dynamically smoothed based on the timeframe. On higher TF such as the hourly or daily we only look 11 bars back, on smaller tf, we use 50 bars.
+export volumeFightMA() => timeframe.isdaily ? 11 : 50
+
+// Smoothing to reduce false signals and highlight the flat zone.
+export volumeFightDelta() => 15
+
+
+// @returns a series of floats, based off volume-weighted moving averages (vwma) with bull_vol() as a source and volumeFightMA() as the length
+export weightedAVG_BullVolume() => ta.vwma(bull_vol() , volumeFightMA() )
+
+// @returns a series of floats, based off volume-weighted moving averages (vwma) with bear_vol() as a source and volumeFightMA() as the length
+export weightedAVG_BearVolume() => ta.vwma(bear_vol() , volumeFightMA() )
+
+
+// @returns a series of floats to normalize and smooth the values
+export VolumeFightDiff()        => ta.sma(weightedAVG_BullVolume() / volume - 1 - (weightedAVG_BearVolume() / volume - 1), volumeFightMA() )
+
+// @returns a series of floats to determine average value for calculation flat-filter
+export VolumeFightFlatFilter()   => math.abs(weightedAVG_BullVolume() + weightedAVG_BearVolume() ) / 2
+
+////#═════════════════════════════════
+
+////# User Defined Fight Strategy
+// @function avg_bull_vol(int) function.
+// @param candle_length, Required (recommended is 11).
+export avg_bull_vol(simple int userMA)   => ta.vwma(bull_vol(), userMA)  //determine vwma
+
+// @function avg_bear_vol(int) function.
+// @param candle_length, Required (recommended is 11).
+export avg_bear_vol(simple int userMA)   => ta.vwma(bear_vol(), userMA)
+
+// @function diff_vol(int) function.
+// @param candle_length, Required (recommended is 11).
+export diff_vol(simple int userMA)       => ta.sma(avg_bull_vol(userMA) / volume - 1 - (avg_bear_vol(userMA) / volume - 1), userMA)  //normalize and smooth the values
+
+// @function vol_flat(int) function.
+// @param candle_length, Required (recommended is 11).
+export vol_flat(simple int userMA)       => math.abs(avg_bull_vol(userMA) + avg_bear_vol(userMA) ) / 2  //determine average value for calculation flat-filter
+
+//@returns bool - determine up volume zones
+export bullVolumeZone(simple int userMA,simple int userDelta)  => avg_bull_vol(userMA) > avg_bear_vol(userMA) and vol_flat(userMA) / avg_bull_vol(userMA) < 1 - userDelta / 100
+
+//@returns bool - determine down volume zones
+export bearVolumeZone(simple int userMA,simple int userDelta)  => avg_bull_vol(userMA) < avg_bear_vol(userMA) and vol_flat(userMA) / avg_bear_vol(userMA) < 1 - userDelta / 100
+
+
+////# ═════════════════════════════════
+
+// @returns series of bool, if there is a bullish volume profile
+export BullishVolumeProfile() => weightedAVG_BullVolume() > weightedAVG_BearVolume() and VolumeFightFlatFilter() / weightedAVG_BullVolume() < (1 - volumeFightDelta() / 100 )
+// @returns series of bool, if there is a bearish volume profile
+export BearishVolumeProfile() => weightedAVG_BullVolume() < weightedAVG_BearVolume() and VolumeFightFlatFilter() / weightedAVG_BearVolume() < (1 - volumeFightDelta() / 100 )
+
+
+
+////////////////////////////////////////////////////////////////////}
+// Pivots
+////////////////////////////////////////////////////////////////////{
+
+// @function Calculates the pivot point and returns its value.
+// @param _type Specifies the type of pivot point.
+// @param _open The open price
+// @param _high The high price
+// @param _low The low price
+// @param _clsoe The close price
+// @returns Returns the value of the calculated pivot point as a tuple.
+export pivots (simple string _type, float _open, float _high, float _low, float _close) =>
+    PP = 0.0
+    R1 = 0.0, R2 = 0.0, R3 = 0.0, R4 = 0.0, R5 = 0.0
+    S1 = 0.0, S2 = 0.0, S3 = 0.0, S4 = 0.0, S5 = 0.0
+
+    if _type == 'Traditional'
+        PP := (_high + _low + _close) / 3
+        R1 := PP + PP - _low
+        S1 := PP - (_high - PP)
+        R2 := PP + _high - _low
+        S2 := PP - (_high - _low)
+        R3 := _high + 2 * (PP - _low)
+        S3 := _low - 2 * (_high - PP)
+
+        true
+
+    else if _type == 'Fibonacci'
+        PP := (_high + _low + _close) / 3
+        R1 := PP + (_high - _low) * 0.382
+        S1 := PP - (_high - _low) * 0.382
+        R2 := PP + (_high - _low) * 0.618
+        S2 := PP - (_high - _low) * 0.618
+        R3 := PP + (_high - _low) * 1.000
+        S3 := PP - (_high - _low) * 1.000
+        R4 := PP + (_high - _low) * 1.272
+        S4 := PP - (_high - _low) * 1.272
+        R5 := PP + (_high - _low) * 1.618
+        S5 := PP - (_high - _low) * 1.618
+
+        true
+
+    else if _type == 'Woodie'
+        PP := (_high + _low + 2 * _open) / 4
+        R1 := PP + PP - _low
+        S1 := PP - (_high - PP)
+        R2 := PP + _high - _low
+        S2 := PP - (_high - _low)
+        R3 := _high + 2 * (PP - _low)
+        S3 := _low - 2 * (_high - PP)
+        R4 := R3 + _high - _low
+        S4 := S3 - (_high - _low)
+
+        true
+
+    else if _type == 'Classic'
+        PP := (_high + _low + _close) / 3
+        pivot_range = _high - _low
+        R1 := PP * 2 - _low
+        S1 := PP * 2 - _high
+        R2 := PP + 1 * pivot_range
+        S2 := PP - 1 * pivot_range
+        R3 := PP + 2 * pivot_range
+        S3 := PP - 2 * pivot_range
+        R4 := PP + 3 * pivot_range
+        S4 := PP - 3 * pivot_range
+
+        true
+
+    else if _type == 'DM'
+        pivotX_Demark_X = _high + _low * 2 + _close
+
+        if _close == _open
+            pivotX_Demark_X := _high + _low + _close * 2
+        if _close > _open
+            pivotX_Demark_X := _high * 2 + _low + _close
+
+        PP := pivotX_Demark_X / 4
+        R1 := pivotX_Demark_X / 2 - _low
+        S1 := pivotX_Demark_X / 2 - _high
+
+    else if _type == 'Camarilla'
+        PP := (_high + _low + _close) / 3
+        pivot_range = _high - _low
+        R1 := _close + pivot_range * 1.1 / 12.0
+        S1 := _close - pivot_range * 1.1 / 12.0
+        R2 := _close + pivot_range * 1.1 / 6.0
+        S2 := _close - pivot_range * 1.1 / 6.0
+        R3 := _close + pivot_range * 1.1 / 4.0
+        S3 := _close - pivot_range * 1.1 / 4.0
+        R4 := _close + pivot_range * 1.1 / 2.0
+        S4 := _close - pivot_range * 1.1 / 2.0
+
+        true
+
+    else if _type == 'Expected Pivot Points'
+        PP := (_high + _low + _close) / 3
+        R1 := PP * 2 - _low
+        S1 := PP * 2 - _high
+        R2 := PP + (R1 - S1)
+        S2 := PP - (R1 - S1)
+
+        true
+
+    [PP, R1, S1, R2, S2, R3, S3, R4, S4, R5, S5]
+
+// @function Calculate the Central Pivot Range
+// @param _high The high price
+// @param _low The low price
+// @param _clsoe The close price
+// @returns Returns the values as a tuple.
+export cpr (float _high, float _low, float _close) =>
+    PP = (_high + _low + _close) / 3
+    BC = (_high + _low) / 2
+    TC = PP - BC + PP
+    CPR = math.abs(TC - BC)
+
+    [BC, TC, CPR]
+
+// @function Calculate the HTF values
+// @param _htf Resolution
+// @returns Returns the values as a tuple.
+export htf_ohlc (simple string _htf) =>
+    var htf_o  = 0., var htf_h  = 0., var htf_l  = 0.,     htf_c  = close
+    var htf_ox = 0., var htf_hx = 0., var htf_lx = 0., var htf_cx = 0.
+
+    if ta.change(time(_htf))
+        htf_ox := htf_o, htf_o := open
+        htf_hx := htf_h, htf_h := high
+        htf_lx := htf_l, htf_l := low
+        htf_cx := htf_c[1]
+    else
+        htf_h  := math.max(high, htf_h)
+        htf_l  := math.min(low , htf_l)
+
+    [htf_ox, htf_hx, htf_lx, htf_cx, htf_o, htf_h, htf_l, htf_c]
+
+
+c_none        = color.new(color.black, 100)
+option_pivot1 = 'All'
+option_pivot2 = 'New only'
+option_pivot3 = 'None'
+option_pivot_label1 = 'Levels'
+option_pivot_label2 = 'Levels & Price'
+option_pivot_label3 = 'Price'
+
+
+// @function Renders a label
+// @returns Returns a label
+export render_pivots_label (bool _show, int _x, float _y, string _text, color _color, string _style, string _xloc, bool _show_history, string _pivotsLabel) =>
+    var label my_label = na
+
+    if _show
+        v_price = str.format('{0,number,#.###}', _y)
+        v_text = ''
+
+        if _pivotsLabel == option_pivot_label1
+            v_text := _text
+        else if _pivotsLabel == option_pivot_label2
+            v_text := _text + ' (' + v_price + ')'
+        else if _pivotsLabel == option_pivot_label3
+            v_text := v_price
+
+        my_label := label.new(_x, _y, v_text, textcolor=_color, color=c_none, style=_style, size=size.normal, xloc=_xloc)
+
+        if not _show_history
+            label.delete(my_label[1])
+
+// @function Renders a box
+// @returns Returns a box
+export render_pivots_box (bool _show,int _x1,float _y1, int _x2,float _y2,color _color, string _xloc, bool _show_history, bool _should_delete, int _transp) =>
+    var box my_box = na
+    if _show
+        my_box := box.new(_x1, _y1, _x2, _y2, bgcolor=color.new(_color, _transp), border_color=c_none, xloc=_xloc)
+        if (not _show_history) or _should_delete
+            box.delete(my_box[1])
+
+// @function Renders a line for pivot points
+// @returns Returns line
+export render_pivots_line (bool _show,int _x1, float  _y, int  _x2, int _width, color _color, string _style, string _xloc, bool _show_history, bool _should_delete, int _transp) =>
+    var line my_line = na
+    if _show and _y > 0
+        my_line := line.new(_x1, _y, _x2, _y, width=_width, color=color.new(_color, _transp), style=_style, xloc=_xloc)
+        if (not _show_history) or _should_delete
+            line.delete(my_line[1])
+    my_line
+
+
+////////////////////////////////////////////////////////////////////}
+// Trend Utilities
+////////////////////////////////////////////////////////////////////{
+
+// @function isDownTrend() function.
+// @param MAlength, Required (recommended is 50 or 200).
+// @returns series of BOOL, if close < priceAVG
+export isDownTrend(simple int MAlength) => close < (ta.sma(close, MAlength))
+
+// @function isUpTrend() function.
+// @param MAlength, Required (recommended is 50 or 200).
+// @returns series of BOOL, if close < priceAVG
+export isUpTrend(simple int MAlength) => close > ta.sma(close, MAlength)
+
+export fastEMA() => ta.ema(close, 6)
+export slowEMA() => ta.ema(close, 25)
+
+
+////# BULL
+export _isUp(simple int fast)          => close > ta.ema(close, fast)
+
+// @function _isStrongUp(int) function.
+// @param int Required. length of the slow EMA (recommended is 6)
+// @returns a series of bool, if the close > ema(close,x) (slowMA). The purpose of this is to help identify the "Ceiling".
+export _isStrongUp(int x) => close > ta.ema(close, x)
+
+
+////# BEAR
+// @function _isStrongDown(int) function.
+// @param int Required. length of the slow EMA (recommended is 25)
+// @returns a series of bool, if the close < ema(close,x) (slowMA). The purpose of this is to help identify the "Floor".
+export _isDown(int x) => close < ta.ema(close, x )
+
+// @function _isStrongDown(int) function.
+// @param int Required. length of the slow EMA (recommended is 25)
+// @returns a series of bool, if the close < ema(close,x) (slowMA). The purpose of this is to help identify the "Floor".
+export _isStrongDown(int x) => close < ta.ema(close, x)
+
+
+////# NA
+// @function _isFastOverSlow, checks if the cross has occured and returns a series of bool.
+// @param fast. length of the slow EMA (recommended is 6)
+// @param slow. length of the slow EMA (recommended is 25)
+export _isFastOverSlow(int fast, int slow) => ta.ema(close, fast) > ta.ema(close, slow)
+//ta.crossunder(fast, slow)
+// @function _isCrossUnderSlow, checks if close has crossed UNDER the slowEMA
+// @param slow. length of the slow EMA (recommended is 25)
+export _isCrossUnderSlow(int length)  => ta.crossunder(close, ta.ema(close, length) )
+// @function _isCrossOverSlow, checks if close has crossed OVER the slowEMA
+// @param slow. length of the slow EMA (recommended is 25)
+export _isCrossOverSlow(int length)   => ta.crossover(close, ta.ema(close, length) )
+
+// NA
+isFastOverSlow      = fastEMA() > slowEMA()
+isCrossUnderSlow    = ta.crossunder(close, slowEMA() )  // NA UP?
+isCrossOverSlow     = ta.crossover(close, slowEMA() )  // NA Down?
+
+// @returns a true if the slowEMA > fastEMA
+// export isFastOverSlow()=>  fe > se ? true : false
+
+// BEARish Leg
+isStrongUp() => close > slowEMA()  // yellow
+isDown() => close < fastEMA()  // black
+
+// BULLish Legs
+isStrongDown()  => close < slowEMA()  // dark green
+isUp()          => close > fastEMA()  // green
+
+// @returns a true if the close < slowEMA.
+// export isStrongDown()=>  ( close < se ) ? true : false
+// @returns a true if the close > fastEMA. The purpose of this is to help identify the "FLOOR of a trend"
+// export isUp()=>  (close > fe) ? true : false
+
+
+//// TREND COLORS
+
+_emaDOWN    = #660000
+_StrongDown = #004d40
+// neutral
+_naCandle   = #ffffff
+// strong trends
+_emaUP      = #009688
+_StrongUP   = #ffeb3b
+
+
+export _emaDOWNColor() => #660000
+export _StrongDownColor() => #004d40
+// neutral
+export _naCandleColor()   => #ffffff
+// strong trends
+export _emaUPColor()      => #009688
+export _StrongUPColor()   => #ffeb3b
+
+
+////# Volume
+useVolume   = true
+volumeDown1 = 100
+volumeDown2 = 50
+volumeDown3 = 100
+///
+volumeUp1 = 1
+volumeUp2 = 50
+volumeUp3 = 1
+////
+volumeLength = 21
+avrg = ta.sma(volume, volumeLength)
+////
+volDown1 = volume > avrg * 1.5 and redCandle()
+volDown2 = volume >= avrg * 0.5 and volume <= avrg * 1.5 and redCandle()
+volDown3 = volume < avrg * 0.5 and redCandle()
+
+////
+volUp1 = volume > avrg * 1.5 and greenCandle()
+volUp2 = volume >= avrg * 0.5 and volume <= avrg * 1.5 and greenCandle()
+volUp3 = volume < avrg * 0.5 and greenCandle()
+
+//// Set the opacity based on the volume
+// volume down?
+cold1 = volumeDown1
+cold2 = volumeDown2
+cold3 = volumeDown3
+// vol up?
+hot1 = volumeUp1
+hot2 = volumeUp2
+hot3 = volumeUp3
+
+////# Convert EMA colors to volume-based colors
+// @function createVolumeCandles() function. USAGE : useVolume ? createVolumeCandles(_emaDOWN) : _emaDOWN
+// @param color Color to display
+export createVolumeCandles(color _color) => ////{
+    color = volDown1 ? color.new(_color, cold1) : volDown2 ? color.new(_color, cold2) : volDown3 ? color.new(_color, cold3) : volUp1 ? color.new(_color, hot1) : volUp2 ? color.new(_color, hot2) : volUp3 ? color.new(_color, hot3) : na
+    color
+////}
+//// Pass in user selected color, than adjust opacity based on volume and return a new color
+//// The returned color will than be passed into BC
+___emaDOWN = useVolume ? createVolumeCandles(_emaDOWN) : _emaDOWN
+
+___StrongDown = useVolume ? createVolumeCandles(_StrongDown) : _StrongDown
+// neutral
+___naCandle = useVolume ? createVolumeCandles(_naCandle) : _naCandle
+// strong trends
+___emaUP = useVolume ? createVolumeCandles(_emaUP) : _emaUP
+___StrongUP = useVolume ? createVolumeCandles(_StrongUP) : _StrongUP
+
+
+////# DIP
+export StrongDownBuy(bool _volume) => isStrongDown() and isUp() and _volume
+//
+
+////    Coloring Algorithm  ////
+trendColors = isFastOverSlow ? isCrossUnderSlow ? ___naCandle : isUp() ? ___emaUP : isStrongUp() ? ___StrongUP : _naCandle : isCrossOverSlow ? ___naCandle : isDown() ? ___emaDOWN : isStrongDown() ? ___StrongDown : isUp() ? isStrongUp() ? ___StrongUP : na : na
+
+
+// export trendCandles() => plotcandle(open, high, low, close, title='Drac Candles', color= trendColors)
+plotcandle(open, high, low, close, title='Drac Candles', color= trendColors)
+
+////////////////////////////////////////////////////////////////////}
+
+////////////////////////////////////////////////////////////////////
+// Patterns Utilities
+////////////////////////////////////////////////////////////////////{
+
+//@returns a series of bool, if there is a EngulfingBullish
+export _isEngulfingBullish() => (open[1]-close[1])>0 and (close-open)>0 and high>high[1] and low<low[1] and (close-open)>(open[1]-close[1]) and (close-open)>(high-close) and (close-open)>(open-low)
+//@returns a series of bool, if there is a EngulfingBearish
+export _isEngulfingBearish() => (close[1]-open[1])>0 and (open-close)>0 and high>high[1] and low<low[1] and (open-close)>(close[1]-open[1]) and (open-close)>(high-open) and (open-close)>(close-low)
+//@returns a series of bool, if there is a dojiup
+export dojiup()              => (open-close)>0 ? (high-open)>(open-close) and (close-low)>(open-close) and (close-low)>(high-open) and (open-close)<((high-open)/8) : (open-low)>(close-open) and (high-close)>(close-open) and (open-low)>(high-close) and (close-open)<((high-close)/8)
+//@returns a series of bool, if there is a dojidown
+export dojidown()            => (open-close)>0 ? (high-open)>(open-close) and (close-low)>(open-close) and (high-open)>(close-low) and (open-close)<((close-low)/8) : (open-low)>(close-open) and (high-close)>(close-open) and (high-close)>(open-low) and (close-open)<((high-close)/8)
+//@returns a series of bool, if there is a EveningStar
+export EveningStar()         => (close[2] > open[2] and math.min(open[1], close[1]) > close[2] and open < math.min(open[1], close[1]) and close < open )
+//@returns a series of bool, if there is a MorningStar
+export MorningStar()         => (close[2] < open[2] and math.max(open[1], close[1]) < close[2] and open > math.max(open[1], close[1]) and close > open )
+//@returns a series of bool, if there is a ShootingStar
+export ShootingStar()        => (open[1] < close[1] and open > close[1] and high - math.max(open, close) >= math.abs(open - close) * 3 and math.min(close, open) - low <= math.abs(open - close))
+//@returns a series of bool, if there is a hammer
+export Hammer()              => (((high - low)>3*(open -close)) and  ((close - low)/(.001 + high - low) > 0.6) and ((open - low)/(.001 + high - low) > 0.6))
+//@returns a series of bool, if there is a InvertedHammer
+export InvertedHammer()      => (( (high - low)>3*(open -close) ) and  ((high - close)/(.001 + high - low) > 0.6) and ((high - open)/(.001 + high - low) > 0.6))
+//@returns a series of bool, if there is a BearishHarami
+export BearishHarami()       => (close[1] > open[1] and open > close and open <= close[1] and open[1] <= close and open - close < close[1] - open[1] )
+//@returns a series of bool, if there is a BullishHarami
+export BullishHarami()       => (open[1] > close[1] and close > open and close <= open[1] and close[1] <= open and close - open < open[1] - close[1] )
+//@returns a series of bool, if there is a BullishBelt
+export BullishBelt()         => (low == open and  open < ( ta.lowest(10)[1] ) and open < close and close > ((high[1] - low[1]) / 2) + low[1])
+//@returns a series of bool, if there is a BullishKicker
+export BullishKicker()       => (open[1]>close[1] and open>=open[1] and close>open)
+//@returns a series of bool, if there is a BearishKicker
+export BearishKicker()       => (open[1]<close[1] and open<=open[1] and close<=open)
+//@returns a series of bool, if there is a HangingMan
+export HangingMan()          => (((high-low>4*(open-close))and((close-low)/(.001+high-low)>=0.75)and((open-low)/(.001+high-low)>=0.75)) and high[1] < open and high[2] < open)
+//@returns a series of bool, if there is a DarkCloudCover
+export DarkCloudCover()      => ((close[1]>open[1])and(((close[1]+open[1])/2)>close)and(open>close)and(open>close[1])and(close>open[1])and((open-close)/(.001+(high-low))>0.6))
+
+
+
+////////////////////////////////////////////////////////////////////}
+// Price Action Utilities
+////////////////////////////////////////////////////////////////////{
+//PBar Percentages
+//@params UserWickPercentage- "Percentage Input For PBars, What % The Wick Of Candle Has To Be". Recommended: 66
+export usePercentagesCP(simple int UserWickPercentage) => UserWickPercentage * .01
+export percentageCPO(simple int UserWickPercentage) => 1 - (UserWickPercentage * .01)
+
+//Shaved Bars Percentages
+//@params UserPercentageRange - Percentage Input For Shaved Bars, Percent of Range it Has To Close On The Lows or Highs
+export percentageShaved(simple int UserPercentageRange) => UserPercentageRange * .01
+
+
+////# PercentageBars / PinBars
+//@function
+//@params UserPercentageTimePeriod-  "
+//@params UserWickPercentage- "Percentage Input For PBars, What % The Wick Of Candle Has To Be". Recommended: 66
+// pBarUp() => spb and open > high - (range * pctCPO) and close > high - (range * pctCPO) and low <= lowest(pblb) ? 1 : 0
+export PercentageBarUp(simple int UserPercentageTimePeriod, simple int UserWickPercentage) => open > high - (_candleRange() * percentageCPO(UserWickPercentage) ) and close > high - (_candleRange() * percentageCPO(UserWickPercentage) ) and low <= ta.lowest(UserPercentageTimePeriod) ? 1 : 0
+export PercentageBarDn(simple int UserPercentageTimePeriod, simple int usePercentagesCP) => open < high - (_candleRange() *  usePercentagesCP) and close < high - (_candleRange() * usePercentagesCP) and high >= ta.highest(UserPercentageTimePeriod) ? 1 : 0
+
+//Shaved Bars
+export ShavedBarUp(simple int UserWickPercentage) => (close >= (high - (_candleRange() * usePercentagesCP(UserWickPercentage) )))
+export ShavedBarDown(simple int UserWickPercentage) => close <= (low + (_candleRange() * usePercentagesCP(UserWickPercentage) ))
+
+//Inside Bars
+export insideBar()  => (high <= high[1] and low >= low[1]) ? 1 : 0
+export outsideBar() =>(high > high[1] and low < low[1]) ? 1 : 0
+////////////////////////////////////////////////////////////////////}
+
+
+
+////////////////////////////////////////////////////////////////////
+// Moving Averages Utilities
+////////////////////////////////////////////////////////////////////{
+// @function maUI(int) function.
+// @description ma1Type = input("EMA", title="", options = ["DEMA", "EMA", "HMA", "LSMA", "MA", "RMA", "SMA", "SWMA", "TEMA", "TMA", "VWMA", "WMA"])
+// @returns a SERIES of FLOATs for the desired Average
+export maUI(simple string type, simple float src, simple int len) =>
+    if type == 'DEMA'
+        2 * ta.ema(src, len) - ta.ema(ta.ema(src, len), len)
+    else if type == 'EMA'
+        ta.ema(src, len)
+    else if type == 'HMA'
+        ta.wma(2 * ta.wma(src, len / 2) - ta.wma(src, len), math.round(math.sqrt(len)))
+    else if type == 'LSMA'
+        3 * ta.wma(src, len) - 2 * ta.sma(src, len)
+    else if type == 'RMA'
+        ta.rma(src, len)
+    else if type == 'SMA'
+        ta.sma(src, len)
+    else if type == 'SWMA'
+        ta.swma(src)
+    else if type == 'TEMA'
+        3 * ta.ema(src, len) - 3 * ta.ema(ta.ema(src, len), len) + ta.ema(ta.ema(ta.ema(src, len), len), len)
+    else if type == 'TMA'
+        ta.swma(ta.wma(src, len))
+    else if type == 'VWMA'
+        ta.vwma(src, len)
+    else if type == 'WMA'
+        ta.wma(src, len)
+
+
+// @function maUI(int) function. Used to create predictive moving averages
+// @returns a SERIES of FLOATS, each of which are the difference between the top and bottom per candle.
+// @example ma1Type      = input("EMA", title="", options = ["DEMA", "EMA", "HMA", "LSMA", "MA", "RMA", "SMA", "SWMA", "TEMA", "TMA", "VWMA", "WMA"])
+ma_prediction(_type, _src, _period, _offset) => (maUI(_type, _src, _period - _offset) * (_period - _offset) + _src * _offset) / _period
+
+
+////////////////////////////////////////////////////////////////////}
+// Bollinger Bands Utilities
+////////////////////////////////////////////////////////////////////{
+
+
+
+
+////////////////////////////////////////////////////////////////////}
+// Ichimoku Utilities
+////////////////////////////////////////////////////////////////////{
+// Ichimoku Constants
+export tenkanPeriods()          => 9
+export kijunPeriods()           => 26
+export SSBPeriods()             => 52
+export displacementPeriods(simple int userDisplacement)    => userDisplacement - 1
+
+// @return Converts current "timeframe.multiplier" plus the TF into minutes of type float.
+export _resolutionInMinutes() => timeframe.multiplier * (timeframe.isseconds ? 1. / 60. : timeframe.isminutes ? 1. : timeframe.isdaily ? 1440. : timeframe.isweekly ? 10080. : timeframe.ismonthly ? 43800. : na)
+
+// @returns resolution of _resolution period in minutes.
+_timeFrameResolutionInMinutes(_res) => request.security(syminfo.tickerid, _res, _resolutionInMinutes() )
+    // _res: resolution of any TF (in "timeframe.period" string format).
+
+// @returns the average number of current chart bars in the given target HTF resolution (this reflects the dataset's history).
+_avgDilationOf(_res) =>
+    // _res: resolution of any TF (in "timeframe.period" string format).
+    b = ta.barssince(ta.change(time(_res)))
+    cumTotal = ta.cum(b == 0 ? b[1] + 1 : 0)
+    cumCount = ta.cum(b == 0 ? 1 : 0)
+    math.round(cumTotal / cumCount)
+
+// Returns the displacement of the resolution
+_getDisplacement(_res) => _avgDilationOf(_res) * displacementPeriods(26)
+
+// @returns average value between lowest and highest
+export _avgLH(simple int _len) => math.avg(ta.lowest(_len), ta.highest(_len))
+
+// Returns _donchian data
+_donchian(_timeframe, _src) =>  request.security(syminfo.tickerid, _timeframe, _src, barmerge.gaps_off, barmerge.lookahead_on)
+
+// Returns ichimoku data
+f_ichimokuData(_isActive, _tf) =>
+    _isShow = _isActive and _timeFrameResolutionInMinutes(_tf) >= _resolutionInMinutes()
+    _displacement = _isShow ? _getDisplacement(_tf) : na
+    _tenkan = _isShow ? _donchian(_tf, _avgLH(tenkanPeriods() )) : na
+    _kijun = _isShow ? _donchian(_tf, _avgLH(kijunPeriods() )) : na
+    _chikou = _isShow ? _donchian(_tf, close) : na
+    _SSA = _isShow ? math.avg(_tenkan, _kijun) : na
+    _SSB = _isShow ? _donchian(_tf, _avgLH(SSBPeriods() )) : na
+    _middleKumo = _isShow ? _SSA[0] > _SSB[0] ? _SSA[0] - math.abs(_SSA[0] - _SSB[0]) / 2 : _SSA[0] + math.abs(_SSA[0] - _SSB[0]) / 2 : na
+    [_displacement, _tenkan, _kijun, _chikou, _SSA, _SSB, _middleKumo]
+
+
+////////////////////////////////////////////////////////////////////
+// Other Utilities
+////////////////////////////////////////////////////////////////////{
+// @function _useRound
+// @param _input, should be the user input with a price
+// @param _input2, should be a user checkbox which allows the user to toggle rounding on and off
+export _useRound(float _input, bool _input2)    => math.round(_input,_input2)
+
+// ————— Converts color choise
+export _stringInColor(string _color) =>
+    _color == 'Aqua' ? #0080FFef : _color == 'Black' ? #000000ef : _color == 'Blue' ? #013BCAef : _color == 'Coral' ? #FF8080ef : _color == 'Gold' ? #CCCC00ef : _color == 'Gray' ? #808080ef : _color == 'Green' ? #008000ef : _color == 'Lime' ? #00FF00ef : _color == 'Maroon' ? #800000ef : _color == 'Orange' ? #FF8000ef : _color == 'Pink' ? #FF0080ef : _color == 'Red' ? #FF0000ef : _color == 'Violet' ? #AA00FFef : _color == 'Yellow' ? #FFFF00ef : #FFFFFFff
+    // _color: color label (string format).
+
+// ————— Converts current resolution
+export _resolutionInString(string _res) =>
+    _res == '1' ? '1m' : _res == '3' ? '3m' : _res == '5' ? '5m' : _res == '15' ? '15m' : _res == '30' ? '30m' : _res == '45' ? '45m' : _res == '60' ? '1h' : _res == '120' ? '2h' : _res == '180' ? '3h' : _res == '240' ? '4h' : _res == '1D' ? 'D' : _res == '1W' ? 'W' : _res == '1M' ? 'M' : _res
+    // _res: resolution of any TF (in "timeframe.period" string format).
+
+
+////////////////////////////////////////////////////////////////////}
+// Study Utilities
+////////////////////////////////////////////////////////////////////{
+// @function useStudy
+// @param type, should be the function you want to study. Options include: NA, redCandle, greenCandle, EngulfingBullish, EngulfingBearish, dojiup, dojidown, isStrongUp, isDown, isStrongDown, isUp, insideBar, outsideBar, isDownTrend, isUpTrend,
+// @returns series of bool, if the conditon is true.
+export useStudy(simple string type) =>
+    if type == 'NA'
+        na
+    else if type == "redCandle"
+        redCandle()
+    else if type == "greenCandle"
+        greenCandle()
+    ////#Patterns
+    else if type == "EngulfingBullish"
+        _isEngulfingBullish()
+    else if type == "EngulfingBearish"
+        _isEngulfingBearish()
+    else if type == "dojiup"
+        dojiup()
+    else if type == "dojidown"
+        dojidown()
+    else if type == "EveningStar"
+        EveningStar()
+    else if type == "MorningStar"
+        MorningStar()
+    else if type == "ShootingStar"
+        ShootingStar()
+    else if type == "Hammer"
+        Hammer()
+    else if type == "InvertedHammer"
+        InvertedHammer()
+    else if type == "BearishHarami"
+        BearishHarami()
+    else if type == "BullishHarami"
+        BullishHarami()
+    else if type == "BullishBelt"
+        BullishBelt()
+    else if type == "BullishKicker"
+        BullishKicker()
+    else if type == "BearishKicker"
+        BearishKicker()
+    else if type == "HangingMan"
+        HangingMan()
+    else if type == "DarkCloudCover"
+        DarkCloudCover()
+    ////# Trend
+    else if type == "isStrongUp"
+        isStrongUp()
+    else if type == "isDown"
+        isDown()
+    else if type == "isStrongDown"
+        isStrongDown()
+    else if type == "isUp"
+        isUp()
+    ////# Other
+    else if type == "insideBar"
+        insideBar()
+    else if type == "outsideBar"
+        outsideBar()
+
+// @function useStudyPrevious, is used to help study previous candles and check if the close >= open[length], close <= close[length], open >= close[length], open <= close[length]
+// @param type, should be the function you want to study. Options include: CloseAbovePreviousOpen, isCloseBelowPreviousClose, OpenGreaterThanPreviousClose, OpenLessThanPreviousClose, OpenLessThanPreviousOpen, OpenMoreThanPreviousOpen
+// @param length, how many candles back do you want to study?
+// @returns series of bool, if the conditon is true.
+export useStudyPrevious(simple string type, simple int length) =>
+    // if type == 'isDownTrend'
+    //     isDownTrend(length)
+    // else if type == 'isUpTrend'
+    //     isUpTrend(length)
+    if type == 'CloseAbovePreviousOpen'
+        close >= open[length]
+    else if type == 'isCloseBelowPreviousClose'
+        close <= close[length]
+    else if type == 'OpenGreaterThanPreviousClose'
+        open >= close[length]
+    else if type == 'OpenLessThanPreviousClose'
+        open <= close[length]
+    else if type == 'OpenLessThanPreviousOpen'
+        open <= open[length]
+    else if type == 'OpenMoreThanPreviousOpen'
+        open >= open[length]
+
+
+//} ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+
+////////////////////////////////////////////////////////////////////}
+// Demo
+////////////////////////////////////////////////////////////////////{
+test = false
+////# floor
+barcolor( test and (volUp1) ? color.new(color.green, 1) : na )
+barcolor( test and (volUp2) ? color.new(color.green, 50) : na )
+barcolor( test and (volUp3) ? color.new(color.green, 90) : na )
+
+////# ceiling
+barcolor( test and (volDown1) ? color.new(color.red, 1) : na )
+barcolor( test and (volDown2) ? color.new(color.red, 50) : na )
+barcolor( test and (volDown3) ? color.new(color.red, 90) : na )
+

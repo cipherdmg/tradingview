@@ -1,0 +1,57 @@
+//@version=5
+// ||###################################################################################||
+// ||                                                                                   ||
+// || 5 Smooth EMA                                                                      ||
+// ||                                                                                   ||
+// ||                                                                                   ||
+// ||###################################################################################||
+
+indicator(title="EMA Price Indicator", shorttitle="EMA Price Indicator", max_labels_count = 500, overlay=false)
+
+bullishColor = input.color(color.new(color.green, 0), title='Bullish Candle Color', group='Colors')
+bearishColor = input.color(color.new(color.red, 0), title='Bearish Candle Color', group='Colors')
+
+// overboughtColor = input.color(color.new(color.white, 0), title='Overbought Color', group='Colors')
+// oversoldColor = input.color(color.new(color.aqua, 0), title='Oversold Color', group='Colors')
+overboughtColor = input.color(color.new(color.red,80), title='Overbought Color', group='Colors')
+oversoldColor = input.color(color.new(color.green, 80), title='Oversold Color', group='Colors')
+
+
+//RSI
+//Plot the Relative Strength Index (RSI) when its over 70 and under 30
+rsi_len = input.int(14, minval=1, title="RSI Length", group='RSI')
+rsi_src = input(close, "RSI Source", group='RSI')
+rsi_min = input.int(30, minval=1, title="RSI Minimum Threshold", group='RSI')
+rsi_max = input.int(70, minval=1, title="RSI Maximum Threshold", group='RSI')
+
+maLength = input.int(9, minval=1, title="Moving Average Length")
+src = input(close, title="Source")
+
+///////////////////////////////////////////////
+// END: user input
+///////////////////////////////////////////////
+
+//##################################################################################################
+//Functions
+//##################################################################################################
+stateText(ema, rsi) =>
+    string txt = ""
+    txt += "ema: " + str.tostring(ema) + "\n"
+    txt += "rsi: " + str.tostring(rsi)
+
+movingaverage = ta.ema(src, maLength)
+rsi = ta.rsi(rsi_src, rsi_len)
+
+line_color = src >= movingaverage? bullishColor: bearishColor
+
+rsi_color = rsi > rsi_max ? color.new(color.red,80)  : rsi < rsi_min ? color.new(color.green, 80) : na
+//rsi_color = rsi > rsi_max ? color.rgb(183, 28, 28)  : rsi < rsi_min ? color.rgb(0, 77, 64) : na
+
+//bgcolor(color = rsi_color, offset=0, editable=true, title="RSI")
+
+plot(series=movingaverage, title="EMA Close Price", style=plot.style_columns, color=line_color)
+
+// Output
+//plot(series=movingaverage, title="Moving Average", color=line_color, linewidth=1, style=plot.style_line)
+
+//label.new(bar_index, na, stateText(movingaverage, rsi), yloc = yloc.abovebar, color = bullishColor)

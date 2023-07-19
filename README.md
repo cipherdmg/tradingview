@@ -1,2 +1,1 @@
-# tradingview
-tradingview
+# Trading View
